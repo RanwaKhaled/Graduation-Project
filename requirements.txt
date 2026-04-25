@@ -1,0 +1,15 @@
+# Backend
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+bcrypt
+python-jose[cryptography]
+authlib
+starlette
+
+# Frontend
+flet
+
+# Shared
+httpx
