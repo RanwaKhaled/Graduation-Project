@@ -13,6 +13,7 @@ grey = "#7D7D7D"
 darkgrey = "#2D2D2D"
 white = "#FFFFFF"
 black = "#000000"
+lilac="#F4E6FF"
 
 
 class SignupPage(ft.View):
@@ -81,7 +82,7 @@ class SignupPage(ft.View):
             gradient=ft.LinearGradient(
                 begin=ft.Alignment(0,-1),
                 end=ft.Alignment(0,1),
-                colors=[white, purple],
+                colors=[lilac, purple],
             ),
             alignment=ft.Alignment(0,0),
             content=self.create_signup_card()
