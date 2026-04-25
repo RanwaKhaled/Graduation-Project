@@ -1,0 +1,5 @@
+to start backend:
+uvicorn backend.main:app --reload
+to start frontend:
+cd frontend
+flet run main.py --web --port 8080
