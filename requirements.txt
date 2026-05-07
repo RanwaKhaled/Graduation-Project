@@ -1,7 +1,8 @@
 # Backend
 fastapi
 uvicorn[standard]
-sqlalchemy
+supabase
+python-multipart
 pydantic
 bcrypt
 python-jose[cryptography]
