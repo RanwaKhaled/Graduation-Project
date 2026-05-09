@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 import uuid
 from database import supabase
-from utils.security import get_current_user
+from utils.security import verify_jwt
 
 router = APIRouter(prefix="/documents", tags=["Document Uploads"])
 
@@ -10,7 +10,7 @@ async def upload_document(
    
     conversation_id: str = Form(...), 
     file: UploadFile = File(...),
-    user = Depends(get_current_user)
+    user = Depends(verify_jwt)
 ):
     try:
         content_type = file.content_type

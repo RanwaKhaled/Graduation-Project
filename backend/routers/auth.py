@@ -4,7 +4,6 @@ from database import supabase
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# --- Pydantic schemas for request bodies ---
 class AuthRequest(BaseModel):
     email: str
     password: str

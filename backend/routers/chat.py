@@ -1,36 +1,39 @@
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 from database import supabase 
-from utils.security import get_current_user
+from utils.security import verify_jwt
 
 router = APIRouter(prefix="/chat", tags=["Chat Traffic"])
 
+
+MOCK_AUDIO_URL = "https://tzxmmiejyyxhlmyxiwhb.supabase.co/storage/v1/object/public/tts-audio/gen_egy1_000.wav"
+
 class MessageRequest(BaseModel):
-    # 1. Made conversation_id optional. If the frontend doesn't send one, we know it's a new chat.
+    # Made conversation_id optional. If the frontend doesn't send one, we know it's a new chat.
     conversation_id: Optional[str] = None
     content: str
     image_url: Optional[str] = None
 
 @router.post("/send")
-async def process_chat_message(request: MessageRequest, user = Depends(get_current_user)):
+async def process_chat_message(request: MessageRequest, user = Depends(verify_jwt)):
     try:
         convo_id = request.conversation_id
         
-        # 2. Auto-Create Conversation
+        # 1. Auto-Create Conversation
         if not convo_id:
             # If no ID was sent, this is a brand new chat. We create it in the database first,
             # linking it to the secure user.id from our bouncer.
             new_convo = supabase.table("conversations").insert({
                 "user_id": user.id,
-                "title": "New Chat" # You can add an AI title-generator later!
+                "title": "New Chat" 
             }).execute()
             
             # Extract the newly generated UUID from the database response
             convo_id = new_convo.data[0]["id"]
 
-        # 3. Save the User's Message
-        # Notice we REMOVED user_id here, matching your schema perfectly!
+        # 2. Save the User's Message
         supabase.table("messages").insert({
             "conversation_id": convo_id,
             "role": "user",
@@ -38,21 +41,25 @@ async def process_chat_message(request: MessageRequest, user = Depends(get_curre
             "image_url": request.image_url
         }).execute()
 
-        # Placeholder for Asmaa's VLM and TTS integrations
-        ai_text = "This is a placeholder secure response from the AI."
+        # 3. Simulate AI Processing Time (Unblocks the frontend UI loading spinners!)
+        await asyncio.sleep(2)
 
-        # 4. Save the AI's Message
+        mock_ai_text = "Hello! This is a mock response from the server. The AI models are currently under development."
+
+
         supabase.table("messages").insert({
             "conversation_id": convo_id,
             "role": "ai",
-            "content": ai_text
+            "content": mock_ai_text,
+            "audio_url": MOCK_AUDIO_URL
         }).execute()
 
-        # We return the new convo_id so the frontend knows what ID to use for the next message!
+  
         return {
             "status": "success", 
             "conversation_id": convo_id,
-            "ai_response": ai_text
+            "ai_response": mock_ai_text,
+            "audio_url": MOCK_AUDIO_URL
         }
 
     except Exception as e:
