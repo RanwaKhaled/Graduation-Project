@@ -47,7 +47,7 @@ def test_chat_send_success():
         "content": "Checking the new audio integration!",
         "conversation_id": TEST_CONVERSATION_ID
     }
-    
+
     response = client.post("/chat/send", json=payload)
     
     assert response.status_code == 200, f"Chat message failed: {response.text}"
