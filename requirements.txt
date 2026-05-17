@@ -7,9 +7,11 @@ bcrypt
 python-jose[cryptography]
 authlib
 starlette
+itsdangerous
 
 # Frontend
 flet
+flet_desktop 
 
 # Shared
 httpx
