@@ -1,6 +1,9 @@
 # frontend/pages/login.py
 import flet as ft
 import re
+import requests
+from backend.database import supabase_auth
+
 
 # colors: global vars
 purple = "#450A75"
@@ -130,7 +133,6 @@ class LoginPage(ft.View):
                         height=40,
                         width=350,
                         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
-                        # login authentication logic should be called here
                         on_click= self.submit_clicked
                     ),
                     # or divider
@@ -156,7 +158,9 @@ class LoginPage(ft.View):
                     bgcolor=white,
                     border=ft.Border.all(1, darkgrey),
                     border_radius=10,
+                    on_click=self.google_signin_clicked
                     ),
+                    
                     # prompt to sign up if youu don't have an account
                     ft.Row(
                         controls=[
@@ -177,8 +181,8 @@ class LoginPage(ft.View):
                 ]
             )
         )
-    
-    # function to submit user credentials
+
+   # function to submit user credentials
     def submit_clicked(self, e):
         # 1. Reset everything
         fields = [self.email_field, self.password_field]
@@ -211,6 +215,61 @@ class LoginPage(ft.View):
 
         self.page.update()
 
+        # 5. Live Backend Connection
         if not empty_fields and valid_email:
-            # login logic call - (empty for now) for the backend people to put  
-            print("Success! Proceeding to login...")
+            # Removed the accidental duplicate 'if' statement here!
+            email_val = self.email_field.value.strip()
+            password_val = self.password_field.value
+            
+            try:
+                # Send the data to YOUR backend endpoint
+                response = requests.post(
+                    "http://localhost:8000/auth/login", 
+                    json={"email": email_val, "password": password_val}
+                )
+                
+                # 2. Handle the Backend's Response
+                if response.status_code == 200:
+                    # Success! Extract the token
+                    data = response.json()
+                    token = data["token"]
+                    
+                    #self.page.client_storage.set("auth_token", token)
+                    self.page.auth_token = token
+                    
+                    # Navigate the user to the main app page
+                    self.page.go("/chat")
+                    
+                else:
+                    # The backend rejected the login
+                    error_data = response.json()
+                    self.shared_error.value = error_data.get("detail", "Invalid credentials.")
+                    self.shared_error.visible = True
+                    self.page.update()
+                    
+            except requests.exceptions.ConnectionError:
+                self.shared_error.value = "Cannot connect to server. Is the backend running?"
+                self.shared_error.visible = True
+                self.page.update()
+    async def google_signin_clicked(self, e):
+        try:
+            # Replace the URL below with your actual deployed Flet web app URL later
+            response = supabase_auth.auth.sign_in_with_oauth({
+                "provider": "google",
+                "options": {
+                    "redirect_to": "http://localhost:8080/"  # Your exact Flet web port
+                }
+            })
+            
+            if hasattr(response, "url") and response.url:
+                # Direct browser redirect to Google
+              await self.page.launch_url(response.url)
+            else:
+                self.shared_error.value = "Failed to initiate Google Authentication."
+                self.shared_error.visible = True
+                self.page.update()
+                
+        except Exception as ex:
+            self.shared_error.value = f"Error: {str(ex)}"
+            self.shared_error.visible = True
+            self.page.update()

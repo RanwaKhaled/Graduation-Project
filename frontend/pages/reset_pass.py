@@ -1,6 +1,7 @@
 # frontend/pages/reset_pass.py
 import flet as ft
 import re
+import requests
 
 # colors: global vars
 purple = "#450A75"
@@ -166,12 +167,30 @@ class ResetPage(ft.View):
 
         self.page.update()
 
+        # 5. THE LIVE BACKEND CONNECTION
         if not empty_fields and valid_email:
-            # show email sent message
-            self.reset_prompt.visible=False  # hide prompt
-            self.message.visible=True  # show email sent message
-            self.email_field.value = ""  # reset email field
-            self.page.update()
-            # password reset logic (empty for now) for the backend people to put  
-            print("Success! Proceeding to reset logic...")
+            try:
+                # Send the email to your FastAPI backend
+                response = requests.post(
+                    "http://localhost:8000/auth/forgot-password",
+                    json={"email": email_val}
+                )
+                
+                if response.status_code == 200:
+                    # Success! Update the UI
+                    self.reset_prompt.visible = False  # hide prompt
+                    self.message.visible = True  # show email sent message
+                    self.email_field.value = ""  # reset email field
+                    self.page.update()
+                else:
+                    # Backend rejected it
+                    error_data = response.json()
+                    self.shared_error.value = error_data.get("detail", "Failed to send reset link.")
+                    self.shared_error.visible = True
+                    self.page.update()
+                    
+            except requests.exceptions.ConnectionError:
+                self.shared_error.value = "Cannot connect to server. Is the backend running?"
+                self.shared_error.visible = True
+                self.page.update()
 

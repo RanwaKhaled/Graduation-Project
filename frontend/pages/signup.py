@@ -1,6 +1,8 @@
 # frontend/pages/chat.py
 import flet as ft
 import re
+import requests
+from backend.database import supabase_auth
 
 # colors: global vars
 purple = "#450A75"
@@ -165,6 +167,7 @@ class SignupPage(ft.View):
                     bgcolor=white,
                     border=ft.Border.all(1, darkgrey),
                     border_radius=10,
+                    on_click=self.google_signin_clicked
                     ),
                     # prompt to sign up if you have an account
                     ft.Row(
@@ -187,7 +190,7 @@ class SignupPage(ft.View):
             )
         )
     
-    # function to submit user credentials
+ 
     def submit_clicked(self, e):
         # 1. Reset everything
         fields = [self.firstname_field, self.lastname_field, self.email_field, self.password_field]
@@ -221,5 +224,63 @@ class SignupPage(ft.View):
         self.page.update()
 
         if not empty_fields and valid_email:
-            print("Success! Proceeding to backend...")
-            # sign up logic call from backend
+            first_val = self.firstname_field.value.strip()
+            last_val = self.lastname_field.value.strip()
+            password_val = self.password_field.value
+            
+            try:
+                # Send the 4 data points to your new RegisterRequest model
+                response = requests.post(
+                    "http://localhost:8000/auth/register",
+                    json={
+                        "first_name": first_val, 
+                        "last_name": last_val, 
+                        "email": email_val, 
+                        "password": password_val
+                    }
+                )
+                
+                # Handle the Response
+                if response.status_code == 200:
+                    # Success! Clean the fields out so they are empty if the user hits "back"
+                    for f in fields:
+                        f.value = ""
+                    
+                    # Navigate to the login page to sign in
+                    self.page.go("/login") 
+                    
+                else:
+                    # The backend rejected the signup (e.g., "User already registered")
+                    error_data = response.json()
+                    self.shared_error.value = error_data.get("detail", "Registration failed.")
+                    self.shared_error.visible = True
+                    self.page.update()
+                    
+            except requests.exceptions.ConnectionError:
+                # Catches the error if your FastAPI server isn't running
+                self.shared_error.value = "Cannot connect to server. Is the backend running?"
+                self.shared_error.visible = True
+                self.page.update()
+            print("Success! Proceeding to signup...")
+    async def google_signin_clicked(self, e):
+        try:
+            # Replace the URL below with your actual deployed Flet web app URL later
+            response = supabase_auth.auth.sign_in_with_oauth({
+                "provider": "google",
+                "options": {
+                    "redirect_to": "http://localhost:8080/"  # Your exact Flet web port
+                }
+            })
+            
+            if hasattr(response, "url") and response.url:
+                # Direct browser redirect to Google
+             await self.page.launch_url(response.url)
+            else:
+                self.shared_error.value = "Failed to initiate Google Authentication."
+                self.shared_error.visible = True
+                self.page.update()
+                
+        except Exception as ex:
+            self.shared_error.value = f"Error: {str(ex)}"
+            self.shared_error.visible = True
+            self.page.update()
