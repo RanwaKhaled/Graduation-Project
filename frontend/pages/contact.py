@@ -1,5 +1,7 @@
 # frontend/pages/chat.py
 import flet as ft
+import requests
+import re 
 
 # colors: global vars
 purple = "#450A75"
@@ -188,6 +190,7 @@ class ContactPage(ft.View):
         ]
     
     def send_message(self, e): 
+    
         # grab refs to the text fields
         fields = self.contact_form.controls
         email_field    = fields[3]   # index based on your controls list
@@ -210,7 +213,6 @@ class ContactPage(ft.View):
                 empty = True
 
         # check email format
-        import re
         email_val = email_field.value.strip() if email_field.value else ""
         if email_val and not re.match(r"^[\w\.-]+@[\w\.-]+\.\w{2,}$", email_val):
             email_field.border_color = "red"
@@ -219,18 +221,53 @@ class ContactPage(ft.View):
         if empty:
             self.contact_error.value = "Please fill in all fields."
             self.contact_error.visible = True
+            self.contact_error.color = "red"
         elif not valid_email:
             self.contact_error.value = "Please enter a valid email."
             self.contact_error.visible = True
+            self.contact_error.color = "red"
 
         self.page.update()
 
+        # --- THE BACKEND CONNECTION ---
         if not empty and valid_email:
-            # reset the fields
-            email_field.value = ""
-            subject_field.value = ""
-            desc_field.value = ""
-            self.page.update()
-            # backend send logic here
-            print("Message sent!")
-            pass
+            try:
+                # 1. Show a loading state so the user knows it's working
+                self.contact_error.value = "Sending message..."
+                self.contact_error.color = "blue"
+                self.contact_error.visible = True
+                self.page.update()
+
+                # 2. Send data to the FastAPI backend
+                # Mapping your 'subject' and 'desc' UI fields to the 'name' and 'message' backend variables
+                response = requests.post(
+                    "http://localhost:8000/contact/send",
+                    json={
+                        "name": subject_field.value.strip(), 
+                        "email": email_val,
+                        "message": desc_field.value.strip()
+                    }
+                )
+                
+                # 3. Handle the response
+                if response.status_code == 200:
+                    # Success! Clear the fields
+                    email_field.value = ""
+                    subject_field.value = ""
+                    desc_field.value = ""
+                    
+                    self.contact_error.value = "Message sent successfully!"
+                    self.contact_error.color = "green"
+                    self.page.update()
+                    print("Success! Message saved to Supabase.")
+                else:
+                    # Backend rejected it
+                    error_data = response.json()
+                    self.contact_error.value = error_data.get("detail", "Failed to send message.")
+                    self.contact_error.color = "red"
+                    self.page.update()
+                    
+            except requests.exceptions.ConnectionError:
+                self.contact_error.value = "Cannot connect to server. Is the backend running?"
+                self.contact_error.color = "red"
+                self.page.update()

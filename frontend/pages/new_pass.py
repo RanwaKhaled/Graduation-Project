@@ -2,6 +2,7 @@
 # this page will be accessed from the reset password link sent to the user's email
 import flet as ft
 import re
+import requests
 
 # colors: global vars
 purple = "#450A75"
@@ -133,7 +134,7 @@ class NewPassPage(ft.View):
         )
     
     def submit_clicked(self, e):
-        # 1. Reset everything
+        
         fields = [self.password_field]
         for f in fields:
             f.border_color = None
@@ -141,13 +142,11 @@ class NewPassPage(ft.View):
         self.shared_error.visible = False
         empty_fields = False
 
-        # 2. Check for empty fields
         for f in fields:
             if not f.value or f.value.strip() == "":
                 f.border_color = "red"
                 empty_fields = True
 
-        # 4. Determine the shared message
         if empty_fields:
             self.shared_error.value = "Please fill in all required fields."
             self.shared_error.visible = True
@@ -157,5 +156,33 @@ class NewPassPage(ft.View):
         if not empty_fields:
             self.message.visible = True
             self.page.update()
-            # password reset logic (empty for now) for the backend people to put  
+        if not empty_fields:
+            password_val = self.password_field.value
+            
+            try:
+                # Send the new password to your backend
+                response = requests.post(
+                    "http://localhost:8000/auth/update-password", 
+                    json={"password": password_val}
+                )
+                
+                if response.status_code == 200:
+                    # Success! Show the success message
+                    self.message.visible = True
+                    self.page.update()
+                    
+                    # Manual routing override to safely go back to login
+                    self.page.route = "/login"
+                    self.page.update()
+                else:
+                    # Backend rejected the new password (e.g., too short)
+                    error_data = response.json()
+                    self.shared_error.value = error_data.get("detail", "Failed to update password.")
+                    self.shared_error.visible = True
+                    self.page.update()
+                    
+            except requests.exceptions.ConnectionError:
+                self.shared_error.value = "Cannot connect to server. Is the backend running?"
+                self.shared_error.visible = True
+                self.page.update()
             print("Success! Proceeding to reset logic...")
