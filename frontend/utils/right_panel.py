@@ -190,7 +190,7 @@ def right_panel(audio: Audio, on_view_change=None):
                     ),
                     PanelHoverButton(
                         ft.Icons.TEXT_FIELDS_ROUNDED, "Transcript",
-                        on_view=lambda e: on_view_change("/dummy.pdf") if on_view_change else None,
+                       on_view=lambda e: on_view_change("/dummy.pdf") if on_view_change else None,
                         on_download=download_file,
                     ),
                 ),

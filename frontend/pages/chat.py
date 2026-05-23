@@ -41,17 +41,9 @@ def main(page: ft.Page):
         body_col.controls[0] = top_bar(active_step=2)
         page.update()
 
-        uploaded_path = os.path.join("assets", f.name)
-        if hasattr(f, 'path') and f.path:
-            shutil.copy(f.path, uploaded_path)
-        
-        final_pdf_name = f.name.rsplit('.', 1)[0] + "_converted.pdf"
-        final_pdf_path = os.path.join("assets", final_pdf_name)
-        
-        convert_to_pdf(uploaded_path, final_pdf_path)
-
-        viewer_url = f"/{final_pdf_name}"
-        viewer_ref.current = PdfViewer(original_pdf_url=viewer_url)
+        # Keep it super simple: just load /dummy.pdf into the viewer for now
+        viewer_url = "/dummy.pdf"
+        viewer_ref.current = PdfViewer(original_pdf_url="/dummy.pdf", base_url="http://127.0.0.1:8080")
         
         inner_row.controls[0] = ft.Container(
             content=viewer_ref.current,
