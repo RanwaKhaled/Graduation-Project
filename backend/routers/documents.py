@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 import uuid
-from database import supabase_auth,supabase_admin
-from utils.security import verify_jwt
+from backend.database import supabase_auth,supabase_admin
+from backend.utils.security import verify_jwt
 
 router = APIRouter(prefix="/documents", tags=["Document Uploads"])
 

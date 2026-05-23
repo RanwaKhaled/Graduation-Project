@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from database import supabase_admin
+from backend.database import supabase_admin
 
 router = APIRouter(prefix="/contact", tags=["Contact Us"])
 

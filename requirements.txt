@@ -9,10 +9,13 @@ python-jose[cryptography]
 authlib
 starlette
 itsdangerous
+routers
 
 # Frontend
 flet
 flet_desktop 
+flet-audio
+flet-webview
 
 # Shared
 httpx

@@ -1,6 +1,6 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from database import supabase_admin,supabase_auth
+from backend.database import supabase_admin,supabase_auth
 
 # This tells FastAPI to look for the "Authorization: Bearer <token>" header
 token_auth_scheme = HTTPBearer()

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 import supabase
-from database import supabase_auth, supabase_admin
+from backend.database import supabase_auth, supabase_admin
 import asyncio
 from fastapi.responses import HTMLResponse
 

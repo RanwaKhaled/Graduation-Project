@@ -2,8 +2,8 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
-from database import supabase_admin
-from utils.security import verify_jwt
+from backend.database import supabase_admin
+from backend.utils.security import verify_jwt
 
 router = APIRouter(prefix="/chat", tags=["Chat Traffic"])
 
