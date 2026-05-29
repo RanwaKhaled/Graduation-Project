@@ -1,9 +1,18 @@
 import flet as ft 
 from .dashed_box import dashed_box
+import shutil
+import os
+from pathlib import Path
+import httpx
+import uuid   
 
 UPLOAD_STATE_IDLE = "idle"
 UPLOAD_STATE_HOVER = "hover"
 UPLOAD_STATE_FAILED = "failed"
+
+UPLOAD_URL = "http://127.0.0.1:8000/documents/upload"
+UPLOAD_DIR = Path("assets/uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 class UploadZone(ft.Container):
 
@@ -204,28 +213,54 @@ class UploadZone(ft.Container):
 
 
     async def _pick_file(self, e):
-        files = await ft.FilePicker().pick_files(
-            allow_multiple=False,
-            allowed_extensions=["pdf", "doc", "docx", "txt", "pptx"]
-        )
-        
-        if not files:
-            self._set_idle()
-            return
-            
-        f = files[0]
-        ext = f.name.rsplit(".", 1)[-1].lower() if "." in f.name else ""
-        
-        if ext not in {"pdf", "doc", "docx", "txt", "pptx"}:
-            self._set_error(f"Unsupported File Type: .{ext}")
-            return
-            
-        if f.size and f.size > 20 * 1024 * 1024:
-            self._set_error(f"File Too Large ({f.size/1024/1024:.1f} MB — max 20 MB)")
-            return
-            
-        self.selected_file = f
-        self._set_idle()
-        
-        if self.on_file_accepted:
-            self.on_file_accepted(f)
+        try:
+            picked_files = await ft.FilePicker().pick_files(
+                allow_multiple=False,
+                allowed_extensions=["pdf"],
+                with_data=True
+            )
+
+            if not picked_files:
+                self._set_idle()
+                return
+
+            f = picked_files[0]
+
+            if f.size and f.size > 20 * 1024 * 1024:
+                self._set_error("File too large (max 20 MB)")
+                return
+
+            print(f"📤 Uploading: {f.name}")
+
+            temp_conversation_id = str(uuid.uuid4())
+
+            headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
+
+            async with httpx.AsyncClient() as client:
+                files = {"file": (f.name, f.bytes, "application/pdf")}
+                data = {"conversation_id": temp_conversation_id}
+
+                response = await client.post(
+                    "http://127.0.0.1:8000/documents/upload", 
+                    files=files, 
+                    data=data,
+                    headers=headers,
+                    timeout=60.0
+                )
+
+                if response.status_code != 200:
+                    print("Backend Error:", response.text)
+                    self._set_error(f"Upload failed: {response.text[:300]}")
+                    return
+
+                result = response.json()
+                public_url = result.get("file_url")
+
+            print(f"✅ Success! URL: {public_url}")
+
+            if self.on_file_accepted:
+                self.on_file_accepted(f, public_url)
+
+        except Exception as ex:
+            print("Upload error:", ex)
+            self._set_error(f"Error: {str(ex)}")

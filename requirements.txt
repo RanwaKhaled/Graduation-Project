@@ -10,6 +10,7 @@ authlib
 starlette
 itsdangerous
 routers
+uuid
 
 # Frontend
 flet

@@ -190,7 +190,7 @@ def right_panel(audio: Audio, on_view_change=None):
                     ),
                     PanelHoverButton(
                         ft.Icons.TEXT_FIELDS_ROUNDED, "Transcript",
-                       on_view=lambda e: on_view_change("/dummy.pdf") if on_view_change else None,
+                       on_view=lambda e: on_view_change("Transcript") if on_view_change else None,
                         on_download=download_file,
                     ),
                 ),
@@ -203,12 +203,12 @@ def right_panel(audio: Audio, on_view_change=None):
                 button_row(
                     PanelHoverButton(
                         ft.Icons.DESCRIPTION_OUTLINED, "Explanation",
-                        on_view=lambda e: on_view_change("/dummy.pdf") if on_view_change else None,
+                        on_view=lambda e: on_view_change("Explanation") if on_view_change else None,
                         on_download=download_file,
                     ),
                     PanelHoverButton(
                         ft.Icons.MENU_BOOK_ROUNDED, "Quiz",
-                        on_view=lambda e: on_view_change("/dummy.pdf") if on_view_change else None,
+                        on_view=lambda e: on_view_change("Quiz") if on_view_change else None,
                         on_download=download_file,
                     ),
                 ),

@@ -1,4 +1,4 @@
-# frontend/pages/chat.py
+# frontend/pages/signup.py
 import flet as ft
 import re
 import requests
@@ -224,57 +224,52 @@ class SignupPage(ft.View):
         self.page.update()
 
         if not empty_fields and valid_email:
-            first_val = self.firstname_field.value.strip()
-            last_val = self.lastname_field.value.strip()
-            password_val = self.password_field.value
-            
-            try:
-                # Send the 4 data points to your new RegisterRequest model
-                response = requests.post(
-                    "http://localhost:8000/auth/register",
-                    json={
-                        "first_name": first_val, 
-                        "last_name": last_val, 
-                        "email": email_val, 
-                        "password": password_val
-                    }
-                )
+                email_val = self.email_field.value.strip()
+                password_val = self.password_field.value
                 
-                # Handle the Response
-                if response.status_code == 200:
-                    # Success! Clean the fields out so they are empty if the user hits "back"
-                    for f in fields:
-                        f.value = ""
+                try:
+                    response = requests.post(
+                        "http://localhost:8000/auth/signup", 
+                        json={"email": email_val, "password": password_val}
+                    )
                     
-                    # Navigate to the login page to sign in
-                    self.page.go("/login") 
-                    
-                else:
-                    # The backend rejected the signup (e.g., "User already registered")
-                    error_data = response.json()
-                    self.shared_error.value = error_data.get("detail", "Registration failed.")
+                    if response.status_code == 200:
+                        data = response.json()
+                        token = data["token"]
+                        
+                        # FIXED: Add .store before .set()
+                        self.page.session.store.set("auth_token", token)
+                        
+                        # 2. Go to chat
+                        print("Success! Redirecting to chat...")
+                        self.page.go("/chat")
+                        
+                    else:
+                        error_data = response.json()
+                        self.shared_error.value = error_data.get("detail", "Invalid credentials.")
+                        self.shared_error.visible = True
+                        self.page.update()
+                        
+                except requests.exceptions.ConnectionError:
+                    self.shared_error.value = "Cannot connect to server. Is the backend running?"
                     self.shared_error.visible = True
                     self.page.update()
-                    
-            except requests.exceptions.ConnectionError:
-                # Catches the error if your FastAPI server isn't running
-                self.shared_error.value = "Cannot connect to server. Is the backend running?"
-                self.shared_error.visible = True
-                self.page.update()
-            print("Success! Proceeding to signup...")
+
+        print("Success! Proceeding to signup...")
+
     async def google_signin_clicked(self, e):
         try:
             # Replace the URL below with your actual deployed Flet web app URL later
             response = supabase_auth.auth.sign_in_with_oauth({
                 "provider": "google",
                 "options": {
-                    "redirect_to": "http://localhost:8080/"  # Your exact Flet web port
+                    "redirect_to": "http://localhost:8080/login"  # Your exact Flet web port
                 }
             })
             
             if hasattr(response, "url") and response.url:
                 # Direct browser redirect to Google
-             await self.page.launch_url(response.url)
+               await self.page.launch_url(response.url, web_window_name="_self")
             else:
                 self.shared_error.value = "Failed to initiate Google Authentication."
                 self.shared_error.visible = True

@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 import supabase
-from backend.database import supabase_auth, supabase_admin
+from backend.database import supabase_auth, supabase_admin, SUPABASE_URL
 import asyncio
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -107,26 +107,87 @@ async def forgot_password(request: PasswordResetRequest):
 @router.get("/google/url")
 async def get_google_auth_url():
     try:
-       
-        response = supabase_auth.auth.sign_in_with_oauth({
-            "provider": "google",
-            "options": {
-                "redirect_to": "http://localhost:8000/auth/callback"
-            }
-        })
-        
-     
-        print("SUPABASE OAUTH RESPONSE:", response)
-        
-
-        if hasattr(response, "url") and response.url:
-            return {"url": response.url}
-        else:
-            raise ValueError("No URL returned in the Supabase OAuth response.")
-            
+        # Construct an authorization URL that sends the user back to our backend
+        # after Google sign-in. The backend will exchange the code for a session and
+        # emit a small HTML page that sets localStorage and redirects the browser to the
+        # frontend /chat route. This avoids losing the token across page reloads.
+        url = f"{SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=http://localhost:8080/login"
+        print(f"Generated Direct Google OAuth URL: {url}")
+        return {"url": url}
     except Exception as e:
         print(f"OAUTH URL ERROR: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Failed to generate Google URL: {str(e)}")
+
+
+@router.get("/browser-callback")
+async def browser_callback(code: str = None):
+    """Endpoint intended to be called by the OAuth redirect in a browser.
+    Exchanges the auth code for a Supabase session and returns a tiny HTML page
+    that stores the access token in browser localStorage and redirects to /chat.
+    """
+    print(f"--- BROWSER CALLBACK (code={code}) ---")
+    if not code:
+        return HTMLResponse(content="<p>Missing code parameter.</p>", status_code=400)
+    try:
+        response = supabase_auth.auth.exchange_code_for_session({"auth_code": code})
+        token = None
+        try:
+            token = response.session.access_token
+        except Exception:
+            # Fallback for different supabase-python return shapes
+            token = getattr(response, 'access_token', None)
+
+        if not token:
+            print("No token retrieved during exchange")
+            return HTMLResponse(content="<p>Failed to retrieve token.</p>", status_code=500)
+
+        # Emit HTML that sets localStorage and navigates back to the frontend
+        html_content = f"""
+        <!doctype html>
+        <html>
+        <head>
+          <meta charset=\"utf-8\"> 
+          <title>Auth Complete</title>
+        </head>
+        <body>
+          <script>
+            try {{
+              localStorage.setItem('auth_token', '{token}');
+              // Redirect to the Flet frontend's chat route
+              window.location.href = 'http://localhost:8080/chat';
+            }} catch (e) {{
+              document.body.innerText = 'Failed to persist token: ' + e;
+            }}
+          </script>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content, status_code=200)
+
+    except Exception as e:
+        print(f"!!! BROWSER CALLBACK ERROR: {str(e)} !!!")
+        return HTMLResponse(content=f"<p>OAuth exchange error: {str(e)}</p>", status_code=500)
+
+
+@router.get("/callback")
+async def auth_callback(code: str):
+    print(f"--- OAUTH CALLBACK CODE EXCHANGE ---")
+    print(f"Code received: {code}")
+    try:
+        # Exchange the auth code for a session
+        response = supabase_auth.auth.exchange_code_for_session({
+            "auth_code": code
+        })
+        
+        token = response.session.access_token
+        print("Auth code exchanged successfully. Token retrieved.")
+        
+        # Return token as JSON
+        return {"token": token}
+        
+    except Exception as e:
+        print(f"!!! OAUTH CALLBACK ERROR: {str(e)} !!!")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 

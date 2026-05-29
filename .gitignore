@@ -29,6 +29,9 @@ venv.bak/
 .vscode/
 *.code-workspace
 .vs/
+.github/
+.antigravitycli
+
 
 dist/
 build/

@@ -1,4 +1,6 @@
 # frontend/pages/login.py
+from urllib import response
+
 import flet as ft
 import re
 import requests
@@ -217,53 +219,51 @@ class LoginPage(ft.View):
 
         # 5. Live Backend Connection
         if not empty_fields and valid_email:
-            # Removed the accidental duplicate 'if' statement here!
-            email_val = self.email_field.value.strip()
-            password_val = self.password_field.value
-            
-            try:
-                # Send the data to YOUR backend endpoint
-                response = requests.post(
-                    "http://localhost:8000/auth/login", 
-                    json={"email": email_val, "password": password_val}
-                )
+                email_val = self.email_field.value.strip()
+                password_val = self.password_field.value
                 
-                # 2. Handle the Backend's Response
-                if response.status_code == 200:
-                    # Success! Extract the token
-                    data = response.json()
-                    token = data["token"]
+                try:
+                    response = requests.post(
+                        "http://localhost:8000/auth/login", 
+                        json={"email": email_val, "password": password_val}
+                    )
                     
-                    #self.page.client_storage.set("auth_token", token)
-                    self.page.auth_token = token
-                    
-                    # Navigate the user to the main app page
-                    self.page.go("/chat")
-                    
-                else:
-                    # The backend rejected the login
-                    error_data = response.json()
-                    self.shared_error.value = error_data.get("detail", "Invalid credentials.")
+                    if response.status_code == 200:
+                        data = response.json()
+                        token = data["token"]
+                        
+                        # FIXED: Add .store before .set()
+                        self.page.session.store.set("auth_token", token)
+                        
+                        # 2. Go to chat
+                        print("Success! Redirecting to chat...")
+                        self.page.go("/chat")
+                        
+                    else:
+                        error_data = response.json()
+                        self.shared_error.value = error_data.get("detail", "Invalid credentials.")
+                        self.shared_error.visible = True
+                        self.page.update()
+                        
+                except requests.exceptions.ConnectionError:
+                    self.shared_error.value = "Cannot connect to server. Is the backend running?"
                     self.shared_error.visible = True
                     self.page.update()
-                    
-            except requests.exceptions.ConnectionError:
-                self.shared_error.value = "Cannot connect to server. Is the backend running?"
-                self.shared_error.visible = True
-                self.page.update()
     async def google_signin_clicked(self, e):
         try:
             # Replace the URL below with your actual deployed Flet web app URL later
             response = supabase_auth.auth.sign_in_with_oauth({
                 "provider": "google",
                 "options": {
-                    "redirect_to": "http://localhost:8080/"  # Your exact Flet web port
+                    "redirect_to": "http://localhost:8080/login"  # Your exact Flet web port
                 }
             })
             
             if hasattr(response, "url") and response.url:
-                # Direct browser redirect to Google
-              await self.page.launch_url(response.url)
+                # Wrap the string in ft.Url and use the UrlTarget enum
+                await self.page.launch_url(
+                    ft.Url(url=response.url, target=ft.UrlTarget.SELF)
+                )
             else:
                 self.shared_error.value = "Failed to initiate Google Authentication."
                 self.shared_error.visible = True

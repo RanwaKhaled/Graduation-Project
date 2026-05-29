@@ -10,7 +10,7 @@ async def upload_document(
    
     conversation_id: str = Form(...), 
     file: UploadFile = File(...),
-    user = Depends(verify_jwt)
+    # user = Depends(verify_jwt)
 ):
     try:
         content_type = file.content_type
@@ -28,10 +28,13 @@ async def upload_document(
         # 2. Read the file data
         file_bytes = await file.read()
 
+        # === TEMPORARY HARDCODED USER ID FOR TESTING ===
+        test_user_id = "6005ce84-b509-4c20-bdd1-98c6674d3cae"
+
         # 3. Create a unique, secure path: user_id / random_uuid . extension
         file_ext = file.filename.split('.')[-1]
-        unique_path = f"{user.id}/{uuid.uuid4()}.{file_ext}"
-
+        # unique_path = f"{user.id}/{uuid.uuid4()}.{file_ext}"
+        unique_path = f"test_uploads/{uuid.uuid4()}.{file_ext}"   # Simplified path
         # 4. Upload directly to your Supabase Storage bucket
         supabase_admin.storage.from_(bucket_name).upload(
             path=unique_path,
@@ -44,7 +47,7 @@ async def upload_document(
 
         # 6. Save the metadata to your SQL database to map it to the conversation
         doc_record = supabase_admin.table("documents").insert({
-            "user_id": user.id,
+            "user_id": test_user_id,
             "conversation_id": conversation_id,
             "title": file.filename,
             "file_url": public_url
