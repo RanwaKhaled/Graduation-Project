@@ -57,6 +57,7 @@ coverage/
 *.tmp
 *.mp3
 *.mp4
+*.pdf
 *.avi
 
 ~*.lnk

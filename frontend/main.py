@@ -4,7 +4,6 @@ import os
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 import sys
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from pages.home import HomePage
@@ -14,7 +13,7 @@ from pages.signup import SignupPage
 from pages.contact import ContactPage
 from pages.reset_pass import ResetPage
 from pages.new_pass import NewPassPage
-
+from backend.database import supabase_auth
 
 def main(page: ft.Page):
     page.title = "Yosr"
@@ -61,18 +60,30 @@ def main(page: ft.Page):
         # Route: Login & Google OAuth Capture
         elif page.route.startswith("/login"):
             if "?code=" in page.route:
-                # Extract code and save to the BROWSER'S local storage
+                # 1. Extract the temporary OAuth code
                 auth_code = page.route.split("?code=")[1].split("&")[0]
-                page.client_storage.set("auth_token", auth_code)
                 
-                print("Google Login Success! Directing to /chat")
-                # Use page.go to cleanly update the URL bar and trigger a safe reroute
-                page.go("/chat")
-                return  # Stop execution here so we don't append a blank login page!
+                try:
+                    # 2. Exchange the code for a REAL Supabase Session (which contains the JWT)
+                    session_data = supabase_auth.auth.exchange_code_for_session({"auth_code": auth_code})
+                    real_jwt_token = session_data.session.access_token
+                    
+                    # 3. Save the REAL JWT token to client storage
+                    page.client_storage.set("auth_token", real_jwt_token)
+                    
+                    print("Google Login Success! Directing to /chat")
+                    page.go("/chat")
+                    return
+                    
+                except Exception as e:
+                    print(f"Google Auth Exchange failed: {e}")
+                    # If it fails, clear the URL and force them to log in normally
+                    page.go("/login")
+                    return
             else:
                 page.views.append(LoginPage(page))
-
         # Route: Signup, Reset, Contact
+
         elif page.route == "/signup":
             page.views.append(SignupPage(page))
 

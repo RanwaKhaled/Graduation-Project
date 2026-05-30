@@ -10,17 +10,17 @@ UPLOAD_STATE_IDLE = "idle"
 UPLOAD_STATE_HOVER = "hover"
 UPLOAD_STATE_FAILED = "failed"
 
-UPLOAD_URL = "http://127.0.0.1:8000/documents/upload"
+UPLOAD_URL = "http://localhost:8000/documents/upload"
 UPLOAD_DIR = Path("assets/uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 class UploadZone(ft.Container):
 
-    def __init__(self, on_file_accepted=None, **kwargs):
+    def __init__(self, on_file_accepted=None, auth_token=None, **kwargs):
         self.on_file_accepted = on_file_accepted
         self.selected_file = None
         self.current_state = UPLOAD_STATE_IDLE
-
+        self.auth_token = auth_token
         self._icon  = ft.Icon(ft.Icons.CLOUD_UPLOAD_OUTLINED, size=28, color="#4D1F84")
         self._icon_circle = ft.Container(
             content=self._icon,
@@ -232,16 +232,19 @@ class UploadZone(ft.Container):
 
             print(f"📤 Uploading: {f.name}")
 
-            temp_conversation_id = str(uuid.uuid4())
+            chat_page = self.page.views[-1]
+            conv_id = getattr(chat_page, 'current_conversation_id', str(uuid.uuid4()))
 
             headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
 
             async with httpx.AsyncClient() as client:
                 files = {"file": (f.name, f.bytes, "application/pdf")}
-                data = {"conversation_id": temp_conversation_id}
+                
+                # Send the conversation ID as a Form field
+                data = {"conversation_id": conv_id} 
 
                 response = await client.post(
-                    "http://127.0.0.1:8000/documents/upload", 
+                    UPLOAD_URL, # Make sure this points to your FastAPI URL
                     files=files, 
                     data=data,
                     headers=headers,

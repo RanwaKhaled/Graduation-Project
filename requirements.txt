@@ -11,6 +11,7 @@ starlette
 itsdangerous
 routers
 uuid
+aiofiles
 
 # Frontend
 flet

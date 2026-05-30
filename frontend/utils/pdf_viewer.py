@@ -1,16 +1,17 @@
 import flet as ft
 from flet_webview import WebView
+import urllib.parse
 
 class PdfViewer(ft.Container):
-    def __init__(self, original_pdf_url: str, **kwargs):
+    def __init__(self, document_urls: dict, **kwargs):
         super().__init__(**kwargs)
         self.expand = True
         self.bgcolor = "#FFFFFF"
         self.border_radius = 12
         self.padding = 24
         
-        self.original_pdf_url = original_pdf_url
-        self.current_pdf_url = original_pdf_url
+        self.document_urls = document_urls
+        self.current_doc_type = "Document"
 
         self.title_text = ft.Text("Uploaded Document", size=20, weight=ft.FontWeight.W_700)
 
@@ -24,30 +25,40 @@ class PdfViewer(ft.Container):
 
         self.header_row = ft.Row([self.title_text, self.toggle_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
+        # Grab the initial URL and make it embeddable
+        initial_url = self.document_urls.get("Document", "")
+        safe_url = self.make_embeddable(initial_url)
+
         self.viewer = WebView(
-            url=original_pdf_url,   # Direct public URL
+            url=safe_url, 
             expand=True,
         )
 
         self.content = ft.Column([
             self.header_row,
-            ft.Container(content=self.viewer, expand=True, border=ft.border.all(1.5, "#EBEBEB"), border_radius=8)
+            ft.Container(content=self.viewer, expand=True, border=ft.Border.all(1.5, "#EBEBEB"), border_radius=8)
         ], expand=True, spacing=16)
 
-    def load_pdf(self, doc_type: str = "", pdf_url: str = "", is_original: bool = False):
-        # For generated files (Explanation, Quiz, etc.)
-        if doc_type in ["Explanation", "Transcript", "Quiz"]:
-            # TODO: Later replace with real URLs from backend
-            pdf_url = f"https://your-supabase-url.supabase.co/storage/v1/object/public/documents/generated_{doc_type.lower()}.pdf"
+    def make_embeddable(self, raw_url: str):
+        if not raw_url:
+            return ""
+        encoded_url = urllib.parse.quote(raw_url, safe="")
+        # MUST BE localhost
+        return f"http://localhost:8000/documents/proxy?url={encoded_url}"
 
-        elif not pdf_url:
-            pdf_url = self.original_pdf_url
+    def load_pdf(self, doc_type: str):
+        target_url = self.document_urls.get(doc_type)
+        
+        if not target_url:
+            return
 
-        self.current_pdf_url = pdf_url
-        self.viewer.url = pdf_url
+        self.current_doc_type = doc_type
+        
+        # Apply the wrapper before updating the viewer!
+        self.viewer.url = self.make_embeddable(target_url)
         self.viewer.update()
 
-        if is_original or doc_type == "Document":
+        if doc_type == "Document":
             self.title_text.value = "Uploaded Document"
             self.toggle_btn.visible = False
         else:
@@ -58,4 +69,4 @@ class PdfViewer(ft.Container):
         self.toggle_btn.update()
 
     def show_original(self, e):
-        self.load_pdf(doc_type="Document", is_original=True)
+        self.load_pdf(doc_type="Document")

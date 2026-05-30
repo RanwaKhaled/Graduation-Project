@@ -233,7 +233,7 @@ class LoginPage(ft.View):
                         token = data["token"]
                         
                         # FIXED: Add .store before .set()
-                        self.page.session.store.set("auth_token", token)
+                        self.page.client_storage.set("auth_token", token)
                         
                         # 2. Go to chat
                         print("Success! Redirecting to chat...")

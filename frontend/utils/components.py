@@ -165,7 +165,7 @@ def top_bar(active_step: int = 1):
     )
 
 
-def main_area(on_file_accepted):
+def main_area(on_file_accepted, auth_token=None):
     def bullet(txt: str):
         return ft.Row(
             [
@@ -177,7 +177,7 @@ def main_area(on_file_accepted):
             alignment=ft.MainAxisAlignment.CENTER,
         )
 
-    upload_zone = UploadZone(on_file_accepted=on_file_accepted)
+    upload_zone = UploadZone(on_file_accepted=on_file_accepted, auth_token=auth_token)
 
     return ft.Container(
         expand=True,

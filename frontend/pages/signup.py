@@ -268,8 +268,10 @@ class SignupPage(ft.View):
             })
             
             if hasattr(response, "url") and response.url:
-                # Direct browser redirect to Google
-               await self.page.launch_url(response.url, web_window_name="_self")
+                # Wrap the string in ft.Url and use the UrlTarget enum
+                await self.page.launch_url(
+                    ft.Url(url=response.url, target=ft.UrlTarget.SELF)
+                )
             else:
                 self.shared_error.value = "Failed to initiate Google Authentication."
                 self.shared_error.visible = True
