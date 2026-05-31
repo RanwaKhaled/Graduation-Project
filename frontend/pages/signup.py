@@ -229,18 +229,21 @@ class SignupPage(ft.View):
                 
                 try:
                     response = requests.post(
-                        "http://localhost:8000/auth/signup", 
-                        json={"email": email_val, "password": password_val}
+                        "http://localhost:8000/auth/register", 
+                        json={"first_name": self.firstname_field.value, # Don't forget to send the names!
+                              "last_name": self.lastname_field.value,
+                              "email": email_val, 
+                              "password": password_val}
                     )
                     
                     if response.status_code == 200:
                         data = response.json()
-                        token = data["token"]
+                        token = data.get("token") # Make sure your backend register route returns the token!
                         
-                        # FIXED: Add .store before .set()
-                        self.page.session.store.set("auth_token", token)
+                        # FIX B: Use client_storage to match the login page
+                        if token:
+                            self.page.client_storage.set("auth_token", token)
                         
-                        # 2. Go to chat
                         print("Success! Redirecting to chat...")
                         self.page.go("/chat")
                         

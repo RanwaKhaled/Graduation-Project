@@ -14,6 +14,7 @@ uuid
 aiofiles
 base64
 convertapi
+requests
 
 # Frontend
 flet

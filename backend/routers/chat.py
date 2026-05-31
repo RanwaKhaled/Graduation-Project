@@ -64,3 +64,31 @@ async def process_chat_message(request: MessageRequest, user = Depends(verify_jw
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Backend Error: {str(e)}")
+    
+@router.get("/history")
+async def get_chat_history(user = Depends(verify_jwt)):
+    try:
+        # Fetch all conversations for this user, newest first
+        result = supabase_admin.table("conversations").select("id, title, created_at").eq("user_id", user.id).order("created_at", desc=True).execute()
+        return {"history": result.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{conversation_id}/documents")
+async def get_conversation_documents(conversation_id: str, user = Depends(verify_jwt)):
+    try:
+        # Get the main uploaded document
+        doc_res = supabase_admin.table("documents").select("file_url").eq("conversation_id", conversation_id).execute()
+        
+        document_url = doc_res.data[0]["file_url"] if doc_res.data else None
+        
+        # We return the real document, and placeholders for the AI-generated ones 
+        # so your Flet UI buttons work while you finish the rest of the backend!
+        return {
+            "Document": document_url,
+            "Explanation": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+            "Transcript": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+            "Quiz": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

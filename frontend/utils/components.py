@@ -102,7 +102,7 @@ def step_connector():
     return ft.Container(width=70, height=1.5, bgcolor=TEXT_GREY, opacity=0.4)
 
 
-def sidebar(on_toggle):
+def sidebar(on_toggle, history_listview, on_logout=None):
     return ft.Container(
         width=80, 
         bgcolor=SIDEBAR_BG,
@@ -122,17 +122,42 @@ def sidebar(on_toggle):
                     padding=ft.Padding(left=22, right=0, top=20, bottom=0),
                     on_click=on_toggle,
                 ),
-                ft.Container(expand=True),
+                
                 ft.Container(
-                    content=ft.Row(
-                        [
-                            ft.Icon(ft.Icons.PERSON_OUTLINE, color="white", size=28),
-                            ft.Text("Profile", color="white", size=15, weight=ft.FontWeight.W_600),
-                        ],
-                        alignment=ft.MainAxisAlignment.START,
-                        spacing=30,
-                    ),
-                    padding=ft.Padding(left=21, right=0, top=0, bottom=24),
+                    content=history_listview,
+                    expand=True,
+                    # Hides the list slightly when collapsed, aligns perfectly when expanded
+                    padding=ft.Padding(left=22, right=10, top=20, bottom=10), 
+                ),
+                
+                ft.Column(
+                    [
+                        ft.Container(
+                            content=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.PERSON_OUTLINE, color="white", size=28),
+                                    ft.Text("Profile", color="white", size=15, weight=ft.FontWeight.W_600),
+                                ],
+                                alignment=ft.MainAxisAlignment.START,
+                                spacing=30,
+                            ),
+                            padding=ft.Padding(left=21, right=0, top=10, bottom=15),
+                        ),
+                        
+                        ft.Container(
+                            content=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.LOGOUT_ROUNDED, color="#FFA8A8", size=26),
+                                    ft.Text("Log Out", color="white", size=15, weight=ft.FontWeight.W_600),
+                                ],
+                                alignment=ft.MainAxisAlignment.START,
+                                spacing=32,
+                            ),
+                            padding=ft.Padding(left=23, right=0, top=0, bottom=24),
+                            on_click=on_logout,
+                        ),
+                    ],
+                    spacing=0,
                 ),
             ],
             spacing=0,
@@ -431,3 +456,4 @@ async def download_file(e):
         await e.page.launch_url("/dummy.pdf")
     except Exception as ex:
         print(f"❌ Download error: {ex}")
+
