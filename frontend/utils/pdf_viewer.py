@@ -1,6 +1,7 @@
 import flet as ft
-from flet_webview import WebView
-import urllib.parse
+import httpx
+import base64
+import fitz  # PyMuPDF
 
 class PdfViewer(ft.Container):
     def __init__(self, document_urls: dict, **kwargs):
@@ -13,7 +14,7 @@ class PdfViewer(ft.Container):
         self.document_urls = document_urls
         self.current_doc_type = "Document"
 
-        self.title_text = ft.Text("Uploaded Document", size=20, weight=ft.FontWeight.W_700)
+        self.title_text = ft.Text("Uploaded Document", size=20, weight=ft.FontWeight.W_700, color="#2D2D2D")
 
         self.toggle_btn = ft.FilledButton(
             "Back to Uploaded Document",
@@ -25,26 +26,22 @@ class PdfViewer(ft.Container):
 
         self.header_row = ft.Row([self.title_text, self.toggle_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
-        # Grab the initial URL and make it embeddable
-        initial_url = self.document_urls.get("Document", "")
-        safe_url = self.make_embeddable(initial_url)
-
-        self.viewer = WebView(
-            url=safe_url, 
+        # A native Flet scrolling list instead of a buggy browser iframe
+        self.page_list = ft.Column(expand=True, spacing=20, scroll=ft.ScrollMode.AUTO)
+        
+        self.viewer_container = ft.Container(
+            content=self.page_list,
             expand=True,
+            border=ft.Border.all(1.5, "#EBEBEB"),
+            border_radius=8,
+            bgcolor="#F8F9FA"
         )
 
-        self.content = ft.Column([
-            self.header_row,
-            ft.Container(content=self.viewer, expand=True, border=ft.Border.all(1.5, "#EBEBEB"), border_radius=8)
-        ], expand=True, spacing=16)
+        self.content = ft.Column([self.header_row, self.viewer_container], expand=True, spacing=16)
 
-    def make_embeddable(self, raw_url: str):
-        if not raw_url:
-            return ""
-        encoded_url = urllib.parse.quote(raw_url, safe="")
-        # MUST BE localhost
-        return f"http://localhost:8000/documents/proxy?url={encoded_url}"
+    def did_mount(self):
+        """Flet automatically calls this the exact millisecond the control is safely added to the screen."""
+        self.load_pdf(doc_type="Document")
 
     def load_pdf(self, doc_type: str):
         target_url = self.document_urls.get(doc_type)
@@ -54,10 +51,6 @@ class PdfViewer(ft.Container):
 
         self.current_doc_type = doc_type
         
-        # Apply the wrapper before updating the viewer!
-        self.viewer.url = self.make_embeddable(target_url)
-        self.viewer.update()
-
         if doc_type == "Document":
             self.title_text.value = "Uploaded Document"
             self.toggle_btn.visible = False
@@ -67,6 +60,54 @@ class PdfViewer(ft.Container):
 
         self.title_text.update()
         self.toggle_btn.update()
+
+        # Show a native loading spinner
+        self.page_list.controls.clear()
+        self.page_list.controls.append(
+            ft.Row([
+                ft.ProgressRing(color="#4A1587"), 
+                ft.Text("Rendering pages...", size=16, weight=ft.FontWeight.W_500)
+            ], alignment=ft.MainAxisAlignment.CENTER)
+        )
+        self.page_list.update()
+
+        try:
+            print(f"🖼️ Rendering PDF directly to Images: {target_url}")
+            
+            # 1. Download the PDF bytes (Bypasses all browser security)
+            response = httpx.get(target_url, follow_redirects=True)
+            response.raise_for_status()
+            
+            # 2. Open the PDF in memory using PyMuPDF
+            doc = fitz.open(stream=response.content, filetype="pdf")
+            
+            self.page_list.controls.clear()
+            
+            # 3. Take a picture of every page and add it to the screen
+            for page in doc:
+                pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)) 
+                img_bytes = pix.tobytes("png")
+                b64_img = base64.b64encode(img_bytes).decode("utf-8")
+                
+                self.page_list.controls.append(
+                    ft.Image(
+                        # THE FIX: Universally supported Data URI format
+                        src=f"data:image/png;base64,{b64_img}", 
+                        fit="contain",
+                        border_radius=4,
+                    )
+                )
+            self.page_list.update()
+            print("✅ Native rendering complete!")
+            
+        except Exception as e:
+            print(f"❌ Error rendering document: {e}")
+            self.page_list.controls.clear()
+            self.page_list.controls.append(
+                ft.Text(f"Failed to load document: {e}", color="red", weight=ft.FontWeight.BOLD)
+            )
+            self.page_list.update()
+
 
     def show_original(self, e):
         self.load_pdf(doc_type="Document")

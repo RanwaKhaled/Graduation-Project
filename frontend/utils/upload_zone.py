@@ -216,7 +216,7 @@ class UploadZone(ft.Container):
         try:
             picked_files = await ft.FilePicker().pick_files(
                 allow_multiple=False,
-                allowed_extensions=["pdf"],
+                allowed_extensions=["pdf", "doc", "docx", "txt", "pptx"],
                 with_data=True
             )
 

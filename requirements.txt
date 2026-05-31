@@ -12,12 +12,16 @@ itsdangerous
 routers
 uuid
 aiofiles
+base64
+convertapi
 
 # Frontend
 flet
 flet_desktop 
 flet-audio
 flet-webview
+pymupdf
+fpdf2
 
 # Shared
 httpx
