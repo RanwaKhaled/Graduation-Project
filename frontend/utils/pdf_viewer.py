@@ -5,17 +5,17 @@ import fitz  # PyMuPDF
 import threading # 🚀 Needed to unblock the UI!
 
 class PdfViewer(ft.Container):
-    def __init__(self, document_urls: dict, **kwargs):
+    def __init__(self, document_urls: dict, document_title: str = "Uploaded Document", **kwargs):
         super().__init__(**kwargs)
         self.expand = True
         self.bgcolor = "#FFFFFF"
         self.border_radius = 12
         self.padding = 24
-        
+        self.document_title = document_title
         self.document_urls = document_urls
         self.current_doc_type = "Document"
 
-        self.title_text = ft.Text("Uploaded Document", size=20, weight=ft.FontWeight.W_700, color="#2D2D2D")
+        self.title_text = ft.Text(self.document_title, size=20, weight=ft.FontWeight.W_700, color="#2D2D2D")
 
         self.toggle_btn = ft.FilledButton(
             "Back to Uploaded Document",
@@ -50,7 +50,7 @@ class PdfViewer(ft.Container):
         self.current_doc_type = doc_type
         
         if doc_type == "Document":
-            self.title_text.value = "Uploaded Document"
+            self.title_text.value = self.document_title
             self.toggle_btn.visible = False
         else:
             self.title_text.value = f"Generated {doc_type}"

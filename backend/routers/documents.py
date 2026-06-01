@@ -12,6 +12,7 @@ router = APIRouter(prefix="/documents", tags=["Document Uploads"])
 @router.post("/upload")
 async def upload_document(
     conversation_id: str = Form(...), 
+    title: str = Form(...),
     file: UploadFile = File(...),
     user = Depends(verify_jwt)
 ):
@@ -70,7 +71,7 @@ async def upload_document(
             supabase_admin.table("conversations").insert({
                 "id": conversation_id,
                 "user_id": active_user_id,
-                "title": file.filename  # <--- THIS FIXES THE ERROR!
+                "title": title  # <--- THIS FIXES THE ERROR!
             }).execute()
         # ---------------------------------------------------------
 
@@ -78,7 +79,7 @@ async def upload_document(
         doc_record = supabase_admin.table("documents").insert({
             "user_id": active_user_id,
             "conversation_id": conversation_id,
-            "title": file.filename,
+            "title": title,
             "file_url": public_url
         }).execute()
 

@@ -99,22 +99,21 @@ class ChatPage(ft.View):
             vertical_alignment=ft.CrossAxisAlignment.STRETCH,
         )
 
-    def accepted(self, f, public_url: str):
-        # 3. This runs when FastAPI successfully returns the Supabase URL
+    def accepted(self, f, public_url: str, custom_title: str): 
         print(f"✅ Real Supabase URL received: {public_url}")
 
-        # Update our dictionary with the REAL document URL
         self.document_urls["Document"] = public_url
 
         if self.body_col:
             self.body_col.controls[0] = top_bar(active_step=2)
             self.page.update()
 
-        # 4. Initialize the viewer with our dictionary of URLs
         if not self.viewer_ref.current:
-            self.viewer_ref.current = PdfViewer(document_urls=self.document_urls)
+            self.viewer_ref.current = PdfViewer(
+                document_urls=self.document_urls, 
+                document_title=custom_title
+            )
 
-        # 5. Swap the UploadBox for the PdfViewer
         if self.inner_row:
             self.inner_row.controls[0] = ft.Container(
                 content=self.viewer_ref.current,
@@ -125,6 +124,8 @@ class ChatPage(ft.View):
             if self.body_col:
                 self.body_col.controls[0] = top_bar(active_step=3)
                 self.page.update()
+
+        threading.Thread(target=self.fetch_history, daemon=True).start()
 
     def handle_logout(self, e):
         self.page.client_storage.set("auth_token", None)
@@ -155,24 +156,33 @@ class ChatPage(ft.View):
         self.history_data = history_data 
         self.history_listview.controls.clear()
         
+        # 🚀 ADDITION: The "New Conversation" Button
+        new_chat_btn = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.ADD_ROUNDED, color="white", size=20),
+                ft.Text("New Conversation", color="white", size=14, weight=ft.FontWeight.W_600)
+            ]),
+            padding=12,
+            border_radius=8,
+            bgcolor="#7B3FBF", # A slightly lighter purple to make it stand out!
+            on_click=self.start_new_conversation # We will write this function next!
+        )
+        self.history_listview.controls.append(new_chat_btn)
+        
+        # --- The History Loop ---
         for chat in history_data:
             is_active = (chat["id"] == self.current_conversation_id)
             
             chat_btn = ft.Container(
                 content=ft.Text(chat["title"], color="white", size=14, no_wrap=True),
-                padding=12, # Added slightly more padding so the text doesn't hit the new borders
+                padding=12, 
                 border_radius=8,
-                
-                # 🎨 THE NEW UI UPGRADES:
-                # A subtle, 15% opacity white border so they are distinct but not distracting
                 border=ft.Border.all(1, ft.Colors.with_opacity(0.3 if is_active else 0.15, "white")),
                 bgcolor="#5A1B8A" if is_active else None, 
-                
-                # Smooth 150ms fade effect for when the mouse hovers over it!
                 animate=ft.Animation(150, curve=ft.AnimationCurve.EASE_OUT), 
-                
                 data=chat["id"], 
-                on_click=lambda e, cid=chat["id"]: self.load_historical_chat(cid),
+                # 🚀 THE FIX: We bind ctitle as a default argument right next to cid!
+                on_click=lambda e, cid=chat["id"], ctitle=chat["title"]: self.load_historical_chat(cid, ctitle=ctitle),
                 on_hover=self.highlight_chat
             )
             self.history_listview.controls.append(chat_btn)
@@ -197,7 +207,7 @@ class ChatPage(ft.View):
         if e.control.page:
             e.control.update()
 
-    def load_historical_chat(self, conversation_id):
+    def load_historical_chat(self, conversation_id, ctitle="Uploaded Document"):
         print(f"Loading old chat: {conversation_id}")
         self.current_conversation_id = conversation_id
         self.update_sidebar_selection()
@@ -212,14 +222,15 @@ class ChatPage(ft.View):
                 
                 # If the viewer doesn't exist, build it and mount it
                 if not self.viewer_ref.current:
-                    self.viewer_ref.current = PdfViewer(document_urls=self.document_urls)
+                    self.viewer_ref.current = PdfViewer(document_urls=self.document_urls, document_title=ctitle)
                     self.inner_row.controls[0] = ft.Container(
                         content=self.viewer_ref.current,
                         expand=True,
                         padding=ft.Padding.only(left=48, right=48, top=40, bottom=40)
                     )
-                    # 🚀 THE FIX: Force Flet to physically draw the viewer on screen BEFORE we try to load text into it!
                     self.page.update() 
+                else: 
+                    self.viewer_ref.current.document_title = ctitle
                 
                 # Now it is safe to load the PDF!
                 self.viewer_ref.current.document_urls = self.document_urls
@@ -238,3 +249,27 @@ class ChatPage(ft.View):
             
             if btn.page:
                 btn.update()
+
+    def start_new_conversation(self, e=None):
+        # 1. Generate a brand new conversation ID
+        self.current_conversation_id = str(uuid.uuid4())
+        
+        # 2. Reset the URLs back to default
+        self.document_urls = {
+            "Document": None,
+            "Explanation": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+            "Transcript":  "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+            "Quiz": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+        }
+        
+        # 3. Nuke the old PDF viewer reference so it builds fresh next time
+        self.viewer_ref = ft.Ref[PdfViewer]()
+        
+        # 4. Swap the Upload UI back in!
+        upload_zone = main_area(on_file_accepted=self.accepted, auth_token=self.auth_token)
+        self.inner_row.controls[0] = upload_zone
+        self.body_col.controls[0] = top_bar(active_step=1)
+        
+        # 5. Clear the active highlight in the sidebar
+        self.update_sidebar_selection()
+        self.page.update()

@@ -217,7 +217,7 @@ class UploadZone(ft.Container):
             picked_files = await ft.FilePicker().pick_files(
                 allow_multiple=False,
                 allowed_extensions=["pdf", "doc", "docx", "txt", "pptx"],
-                with_data=True
+                with_data=True,
             )
 
             if not picked_files:
@@ -230,8 +230,86 @@ class UploadZone(ft.Container):
                 self._set_error("File too large (max 20 MB)")
                 return
 
-            print(f"📤 Uploading: {f.name}")
+            title_field = ft.TextField(
+                label="Document Topic",
+                hint_text="e.g., Final Year Grad Project",
+                autofocus=True,
+                color="#2D2D2D", 
+                border_color="#4D1F84",
+                cursor_color="#4D1F84",
+                focused_border_color="#4D1F84"
+            )
 
+            def close_dialog(e):
+                dialog.open = False
+                self.page.update()
+                self._set_idle()
+
+            async def submit_title(e):
+                # If they leave it blank, default back to the raw file name
+                user_title = title_field.value.strip() or f.name
+                dialog.open = False
+                self.page.update()
+                
+                # Pass the file and the custom title to the second half of our upload logic!
+                await self._execute_upload(f, user_title)
+
+            dialog = ft.AlertDialog(
+                bgcolor="#F8F4FF",
+                shape=ft.RoundedRectangleBorder(radius=16), # Softer, modern corners
+                
+                title=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.DESCRIPTION_ROUNDED, color="#4D1F84", size=24),
+                        ft.Text("Name this document", weight=ft.FontWeight.W_700, color="#2D2D2D", size=18)
+                    ],
+                    alignment=ft.MainAxisAlignment.START,
+                    spacing=10
+                ),
+                
+                content=ft.Container(
+                    content=ft.Column([
+                        ft.Text("What topic are we tackling today?", size=14, color="#6B4B9A"),
+                        title_field
+                    ], tight=True, spacing=15),
+                    padding=ft.Padding(10, 10, 10, 0),
+                    width=400 # Gives the text field nice breathing room
+                ),
+                
+                actions=[
+                    ft.TextButton(
+                        "Cancel", 
+                        on_click=close_dialog, 
+                        style=ft.ButtonStyle(color="#8D63C6")
+                    ),
+                    ft.FilledButton(
+                        "Upload", 
+                        on_click=submit_title, 
+                        style=ft.ButtonStyle(
+                            bgcolor="#4D1F84", 
+                            color="white", 
+                            shape=ft.RoundedRectangleBorder(radius=8)
+                        )
+                    )
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+                actions_padding=ft.Padding(15, 10, 15, 15), # Pushes the buttons off the bottom edge
+            )
+
+            self.page.overlay.append(dialog)
+            dialog.open = True
+            self.page.update()
+
+        except Exception as ex:
+            print("Upload error:", ex)
+            self._set_error(f"Error: {str(ex)}")
+
+
+    # --- THE SECOND HALF OF YOUR EXISTING LOGIC ---
+    async def _execute_upload(self, f, custom_title):
+        try:
+            print(f"📤 Uploading: {f.name} as '{custom_title}'")
+            
             chat_page = self.page.views[-1]
             conv_id = getattr(chat_page, 'current_conversation_id', str(uuid.uuid4()))
 
@@ -240,11 +318,13 @@ class UploadZone(ft.Container):
             async with httpx.AsyncClient() as client:
                 files = {"file": (f.name, f.bytes, "application/pdf")}
                 
-                # Send the conversation ID as a Form field
-                data = {"conversation_id": conv_id} 
+                data = {
+                    "conversation_id": conv_id,
+                    "title": custom_title
+                } 
 
                 response = await client.post(
-                    UPLOAD_URL, # Make sure this points to your FastAPI URL
+                    UPLOAD_URL, 
                     files=files, 
                     data=data,
                     headers=headers,
@@ -262,7 +342,7 @@ class UploadZone(ft.Container):
             print(f"✅ Success! URL: {public_url}")
 
             if self.on_file_accepted:
-                self.on_file_accepted(f, public_url)
+                self.on_file_accepted(f, public_url, custom_title)
 
         except Exception as ex:
             print("Upload error:", ex)
