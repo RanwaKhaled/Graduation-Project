@@ -1,6 +1,7 @@
 # frontend/main.py
 import flet as ft
 import os
+import time
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 import sys
@@ -72,6 +73,7 @@ def main(page: ft.Page):
                     page.client_storage.set("auth_token", real_jwt_token)
                     
                     print("Google Login Success! Directing to /chat")
+                    time.sleep(1) 
                     page.go("/chat")
                     return
                     

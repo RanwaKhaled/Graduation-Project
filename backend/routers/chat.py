@@ -68,9 +68,21 @@ async def process_chat_message(request: MessageRequest, user = Depends(verify_jw
 @router.get("/history")
 async def get_chat_history(user = Depends(verify_jwt)):
     try:
-        # Fetch all conversations for this user, newest first
+        # 1. Fetch all conversations for this user
         result = supabase_admin.table("conversations").select("id, title, created_at").eq("user_id", user.id).order("created_at", desc=True).execute()
-        return {"history": result.data}
+        
+        # 2. Fetch the user's full name from your profiles table
+        profile_result = supabase_admin.table("profiles").select("full_name").eq("id", user.id).execute()
+        
+        # 3. Safely parse out just the first name (defaults to "User" if something goes wrong)
+        first_name = "User"
+        if profile_result.data and profile_result.data[0].get("full_name"):
+            first_name = profile_result.data[0]["full_name"].split(" ")[0]
+
+        return {
+            "history": result.data,
+            "first_name": first_name # Send it back to the frontend!
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

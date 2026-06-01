@@ -102,44 +102,47 @@ def step_connector():
     return ft.Container(width=70, height=1.5, bgcolor=TEXT_GREY, opacity=0.4)
 
 
-def sidebar(on_toggle, history_listview, on_logout=None):
+def sidebar(on_toggle, history_listview, user_first_name, chat_history_text, logout_text, on_logout=None):
     return ft.Container(
-        width=80, 
-        bgcolor=SIDEBAR_BG,
-        animate=300, 
+        width=70, # Starts closed
+        bgcolor=SIDEBAR_BG, # Make sure to use your actual SIDEBAR_BG variable here
+        animate=ft.Animation(300, "easeOut"), 
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
         content=ft.Column(
             [
+                # --- Top Toggle Row ---
                 ft.Container(
                     content=ft.Row(
                         [
                             ft.Icon(ft.Icons.MENU, color="white", size=26),
-                            ft.Text("Chat History", color="white", size=15, weight=ft.FontWeight.W_600),
+                            # Reduced spacing to 20 so it sits nicely to the right of the icon
+                            chat_history_text,
                         ],
                         alignment=ft.MainAxisAlignment.START,
-                        spacing=50,
+                        spacing=20, 
                     ),
                     padding=ft.Padding(left=22, right=0, top=20, bottom=0),
                     on_click=on_toggle,
                 ),
                 
+                # --- The History List ---
                 ft.Container(
                     content=history_listview,
                     expand=True,
-                    # Hides the list slightly when collapsed, aligns perfectly when expanded
-                    padding=ft.Padding(left=22, right=10, top=20, bottom=10), 
+                    padding=ft.Padding(left=22, right=10, top=20, bottom=10),
                 ),
                 
+                # --- Bottom Profile & Logout ---
                 ft.Column(
                     [
                         ft.Container(
                             content=ft.Row(
                                 [
                                     ft.Icon(ft.Icons.PERSON_OUTLINE, color="white", size=28),
-                                    ft.Text("Profile", color="white", size=15, weight=ft.FontWeight.W_600),
+                                    user_first_name,
                                 ],
                                 alignment=ft.MainAxisAlignment.START,
-                                spacing=30,
+                                spacing=20, 
                             ),
                             padding=ft.Padding(left=21, right=0, top=10, bottom=15),
                         ),
@@ -148,10 +151,10 @@ def sidebar(on_toggle, history_listview, on_logout=None):
                             content=ft.Row(
                                 [
                                     ft.Icon(ft.Icons.LOGOUT_ROUNDED, color="#FFA8A8", size=26),
-                                    ft.Text("Log Out", color="white", size=15, weight=ft.FontWeight.W_600),
+                                    logout_text,
                                 ],
                                 alignment=ft.MainAxisAlignment.START,
-                                spacing=32,
+                                spacing=22, 
                             ),
                             padding=ft.Padding(left=23, right=0, top=0, bottom=24),
                             on_click=on_logout,

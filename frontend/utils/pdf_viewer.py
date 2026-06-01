@@ -2,6 +2,7 @@ import flet as ft
 import httpx
 import base64
 import fitz  # PyMuPDF
+import threading # 🚀 Needed to unblock the UI!
 
 class PdfViewer(ft.Container):
     def __init__(self, document_urls: dict, **kwargs):
@@ -26,7 +27,6 @@ class PdfViewer(ft.Container):
 
         self.header_row = ft.Row([self.title_text, self.toggle_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
-        # A native Flet scrolling list instead of a buggy browser iframe
         self.page_list = ft.Column(expand=True, spacing=20, scroll=ft.ScrollMode.AUTO)
         
         self.viewer_container = ft.Container(
@@ -40,12 +40,10 @@ class PdfViewer(ft.Container):
         self.content = ft.Column([self.header_row, self.viewer_container], expand=True, spacing=16)
 
     def did_mount(self):
-        """Flet automatically calls this the exact millisecond the control is safely added to the screen."""
         self.load_pdf(doc_type="Document")
 
     def load_pdf(self, doc_type: str):
         target_url = self.document_urls.get(doc_type)
-        
         if not target_url:
             return
 
@@ -61,52 +59,76 @@ class PdfViewer(ft.Container):
         self.title_text.update()
         self.toggle_btn.update()
 
-        # Show a native loading spinner
+        # --- THE POLISHED LOADING SPINNER ---
         self.page_list.controls.clear()
         self.page_list.controls.append(
-            ft.Row([
-                ft.ProgressRing(color="#4A1587"), 
-                ft.Text("Rendering pages...", size=16, weight=ft.FontWeight.W_500)
-            ], alignment=ft.MainAxisAlignment.CENTER)
+            ft.Container(
+                content=ft.Column([
+                    ft.ProgressRing(color="#4A1587", stroke_width=4, width=40, height=40), 
+                    ft.Text("Loading your document...", size=15, weight=ft.FontWeight.W_600, color="#4A1587")
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=15),
+                alignment=ft.Alignment.CENTER,
+                expand=True,
+                padding=ft.Padding(0, 150, 0, 0) # Pushes it neatly into the center of the viewer
+            )
         )
         self.page_list.update()
 
+        # 🚀 FIRE AND FORGET: Hand the heavy work to a background thread!
+        threading.Thread(target=self._process_pdf_background, args=(target_url,), daemon=True).start()
+
+
+    def _process_pdf_background(self, target_url):
+        """This entirely runs in the background. The main UI thread is now completely free to animate the loading ring."""
         try:
             print(f"🖼️ Rendering PDF directly to Images: {target_url}")
             
-            # 1. Download the PDF bytes (Bypasses all browser security)
+            # 1. Download the PDF bytes
             response = httpx.get(target_url, follow_redirects=True)
             response.raise_for_status()
             
             # 2. Open the PDF in memory using PyMuPDF
             doc = fitz.open(stream=response.content, filetype="pdf")
             
-            self.page_list.controls.clear()
+            # Create a temporary list so we don't force Flet to redraw 50 times during the loop
+            new_pages = []
             
-            # 3. Take a picture of every page and add it to the screen
+            # 3. Take a picture of every page
             for page in doc:
                 pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)) 
                 img_bytes = pix.tobytes("png")
                 b64_img = base64.b64encode(img_bytes).decode("utf-8")
                 
-                self.page_list.controls.append(
+                new_pages.append(
                     ft.Image(
-                        # THE FIX: Universally supported Data URI format
                         src=f"data:image/png;base64,{b64_img}", 
                         fit="contain",
                         border_radius=4,
                     )
                 )
-            self.page_list.update()
+            
+            # 4. We are done! Swap the loading spinner for the images
+            self.page_list.controls.clear()
+            self.page_list.controls.extend(new_pages)
+            
+            # Safety check in case the user routed away before it finished downloading
+            if self.page_list.page:
+                self.page_list.update()
+                
             print("✅ Native rendering complete!")
             
         except Exception as e:
             print(f"❌ Error rendering document: {e}")
             self.page_list.controls.clear()
             self.page_list.controls.append(
-                ft.Text(f"Failed to load document: {e}", color="red", weight=ft.FontWeight.BOLD)
+                ft.Container(
+                    content=ft.Text(f"Failed to load document: {e}", color="red", weight=ft.FontWeight.BOLD),
+                    alignment=ft.Alignment.CENTER,
+                    padding=ft.Padding(0, 50, 0, 0)
+                )
             )
-            self.page_list.update()
+            if self.page_list.page:
+                self.page_list.update()
 
 
     def show_original(self, e):
