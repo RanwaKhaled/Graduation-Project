@@ -5,7 +5,7 @@ import flet_audio as fta
 import time
 import asyncio
 
-def right_panel(audio: Audio, on_view_change=None):
+def right_panel(audio: Audio, on_view_change=None, has_materials=False):
     div = ft.Divider(color="#B3D3D6", height=1, thickness=1)
 
     is_view_clicked = [False]
@@ -166,6 +166,9 @@ def right_panel(audio: Audio, on_view_change=None):
 
     def button_row(*buttons):
         return ft.Row(list(buttons), spacing=10, width=260)
+    
+    status_text = "Your materials are ready for viewing!" if has_materials else "You haven't uploaded any documents yet."
+    status_color = "#304A50" if has_materials else "#6B858B"
 
     return ft.Container(
         width=300,
@@ -174,7 +177,7 @@ def right_panel(audio: Audio, on_view_change=None):
         content=ft.Column(
             [
                 ft.Text("Audio Explanation", size=15, weight=ft.FontWeight.W_600, color="#304A50"),
-                ft.Text("You haven't uploaded any documents yet.", size=12, color="#6B858B"),
+                ft.Text(status_text, size=12, color=status_color),
                 div,
 
                 ft.Text("Playback", size=14, weight=ft.FontWeight.W_600, color="#304A50"),
@@ -197,7 +200,7 @@ def right_panel(audio: Audio, on_view_change=None):
                 div,
 
                 ft.Text("Document Overview & Quiz", size=15, weight=ft.FontWeight.W_600, color="#304A50"),
-                ft.Text("You haven't uploaded any documents yet.", size=12, color="#6B858B"),
+                ft.Text(status_text, size=12, color=status_color),
 
                 ft.Text("View & Download", size=14, weight=ft.FontWeight.W_600, color="#304A50"),
                 button_row(

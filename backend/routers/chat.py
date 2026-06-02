@@ -68,39 +68,66 @@ async def process_chat_message(request: MessageRequest, user = Depends(verify_jw
 @router.get("/history")
 async def get_chat_history(user = Depends(verify_jwt)):
     try:
-        # 1. Fetch all conversations for this user
-        result = supabase_admin.table("conversations").select("id, title, created_at").eq("user_id", user.id).order("created_at", desc=True).execute()
+        convos_result = supabase_admin.table("conversations").select("id, title, created_at").eq("user_id", user.id).order("created_at", desc=True).execute()
+        
+        docs_result = supabase_admin.table("documents").select("conversation_id").eq("user_id", user.id).execute()
+        
+        # Create a blazing-fast lookup set of conversation IDs that actually have files attached
+        valid_convo_ids = {doc["conversation_id"] for doc in docs_result.data if doc.get("conversation_id")}
+        
+        # Filter the history! Keep only conversations that exist in the valid set
+        filtered_history = [chat for chat in convos_result.data if chat["id"] in valid_convo_ids]
         
         # 2. Fetch the user's full name from your profiles table
         profile_result = supabase_admin.table("profiles").select("full_name").eq("id", user.id).execute()
         
-        # 3. Safely parse out just the first name (defaults to "User" if something goes wrong)
+        # 3. Safely parse out just the first name
         first_name = "User"
         if profile_result.data and profile_result.data[0].get("full_name"):
             first_name = profile_result.data[0]["full_name"].split(" ")[0]
 
         return {
-            "history": result.data,
-            "first_name": first_name # Send it back to the frontend!
+            "history": filtered_history, 
+            "first_name": first_name 
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
 
 @router.get("/{conversation_id}/documents")
 async def get_conversation_documents(conversation_id: str, user = Depends(verify_jwt)):
     try:
-        # Get the main uploaded document
-        doc_res = supabase_admin.table("documents").select("file_url").eq("conversation_id", conversation_id).execute()
+        docs_res = supabase_admin.table("documents").select("file_url, doc_type").eq("conversation_id", conversation_id).execute()
         
-        document_url = doc_res.data[0]["file_url"] if doc_res.data else None
-        
-        # We return the real document, and placeholders for the AI-generated ones 
-        # so your Flet UI buttons work while you finish the rest of the backend!
-        return {
-            "Document": document_url,
-            "Explanation": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-            "Transcript": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-            "Quiz": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+        urls = {
+            "Document": None,
+            "Explanation": None,
+            "Transcript": None,
+            "Quiz": None
         }
+
+        if docs_res.data:
+            for doc in docs_res.data:
+                raw_tag = doc.get("doc_type")
+
+                final_tag = "Document" 
+                
+                if raw_tag:
+                    # Clean the database string (make it lowercase to ignore capitalization)
+                    clean_tag = raw_tag.lower().strip()
+                    
+                    if clean_tag in ["uploaded", "document", "random_doc"]:
+                        final_tag = "Document"
+                    elif clean_tag in ["explanation"]:
+                        final_tag = "Explanation"
+                    elif clean_tag in ["transcription", "transcript"]: # Catches both!
+                        final_tag = "Transcript"
+                    elif clean_tag == "quiz":
+                        final_tag = "Quiz"
+
+                urls[final_tag] = doc["file_url"]
+
+        return urls
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

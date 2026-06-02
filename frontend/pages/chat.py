@@ -1,3 +1,4 @@
+import time
 import flet as ft
 import uuid
 from flet_audio import Audio, ReleaseMode
@@ -12,19 +13,27 @@ class ChatPage(ft.View):
         super().__init__(route="/chat", padding=0, bgcolor=MAIN_BG)
         
         self.auth_token = auth_token
+        print(f"🔑 MY JWT TOKEN:\n{self.auth_token}\n")
         self.viewer_ref = ft.Ref[PdfViewer]()
-        
-        # 1. Generate the conversation ID the moment they open the chat
+        self.processing_chats = set()
+
+        self.shield = ft.Container(
+            bgcolor=ft.Colors.TRANSPARENT,
+            left=0, right=0, top=0, bottom=0,
+            visible=False,
+            on_click=self.show_locked_warning
+        )
+
         self.current_conversation_id = str(uuid.uuid4())
+        
         self.profile_name = ft.Text("...", color="white", size=15, weight=ft.FontWeight.W_600, animate_opacity=150)
         self.chat_history_text = ft.Text("Chat History", color="white", size=15, weight=ft.FontWeight.W_600, opacity=0, animate_opacity=150)
         self.logout_text = ft.Text("Log Out", color="white", size=15, weight=ft.FontWeight.W_600, opacity=0, animate_opacity=150)
         self.history_listview = ft.ListView(expand=True, spacing=5, visible=False)
 
-        # 2. Set up our URLs. 
-        # Using safe public PDFs for Explanation/Quiz so you can test the UI buttons NOW.
+
         self.document_urls = {
-            "Document": None, # Will be filled when they upload
+            "Document": None, 
             "Explanation": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
             "Transcript":  "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
             "Quiz": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
@@ -64,19 +73,20 @@ class ChatPage(ft.View):
 
         my_sidebar = sidebar(toggle_sidebar, self.history_listview, user_first_name=self.profile_name, chat_history_text=self.chat_history_text, logout_text=self.logout_text, on_logout=self.handle_logout)
 
-        def on_view_change(doc_type: str):
-            # This triggers when you click "Explanation" or "Quiz" in the right panel
-            if self.viewer_ref.current:
-                self.viewer_ref.current.load_pdf(doc_type=doc_type)
-                self.page.update()
-
-        # Pass the accepted function down
         upload_zone = main_area(on_file_accepted=self.accepted, auth_token=self.auth_token)
+
+        safe_right_panel = ft.Stack(
+            controls=[
+                right_panel(self.audio, on_view_change=self.handle_view_change),
+                self.shield 
+            ],
+            # expand=True
+        )
 
         self.inner_row = ft.Row(
             [
                 upload_zone,
-                right_panel(self.audio, on_view_change=on_view_change),
+                safe_right_panel,
             ],
             expand=True,
             spacing=0,
@@ -103,16 +113,24 @@ class ChatPage(ft.View):
         print(f"✅ Real Supabase URL received: {public_url}")
 
         self.document_urls["Document"] = public_url
+        active_id = self.current_conversation_id
 
+        self.processing_chats.add(active_id)
+        
         if self.body_col:
             self.body_col.controls[0] = top_bar(active_step=2)
-            self.page.update()
 
         if not self.viewer_ref.current:
-            self.viewer_ref.current = PdfViewer(
-                document_urls=self.document_urls, 
-                document_title=custom_title
+            self.viewer_ref.current = PdfViewer(document_urls=self.document_urls, document_title=custom_title)
+            self.inner_row.controls[0] = ft.Container(
+                content=self.viewer_ref.current,
+                expand=True,
+                padding=ft.Padding.only(left=48, right=48, top=40, bottom=40)
             )
+        else:
+            self.viewer_ref.current.document_title = custom_title
+            self.viewer_ref.current.document_urls = self.document_urls
+            self.viewer_ref.current.load_pdf(doc_type="Document")
 
         if self.inner_row:
             self.inner_row.controls[0] = ft.Container(
@@ -121,11 +139,12 @@ class ChatPage(ft.View):
                 padding=ft.Padding.only(left=48, right=48, top=40, bottom=40)
             )
 
-            if self.body_col:
-                self.body_col.controls[0] = top_bar(active_step=3)
-                self.page.update()
+        
+        self.shield.visible = True
+        self.page.update()
 
         threading.Thread(target=self.fetch_history, daemon=True).start()
+        threading.Thread(target=self.wait_for_ai_generation, args=(active_id,), daemon=True).start()
 
     def handle_logout(self, e):
         self.page.client_storage.set("auth_token", None)
@@ -211,16 +230,36 @@ class ChatPage(ft.View):
         print(f"Loading old chat: {conversation_id}")
         self.current_conversation_id = conversation_id
         self.update_sidebar_selection()
-            
+
+        is_processing = conversation_id in self.processing_chats
+
+        if self.body_col:
+            self.body_col.controls[0] = top_bar(active_step=2 if is_processing else 3)
+
+        self.shield.visible = is_processing
+
+        if self.inner_row:
+            self.inner_row.controls[1] = ft.Stack(
+                controls=[
+                    right_panel(self.audio, on_view_change=self.handle_view_change, has_materials=not is_processing),
+                    self.shield
+                ],
+                # expand=True
+            )
+        
+
         try:
             res = requests.get(
                 f"http://localhost:8000/chat/{conversation_id}/documents",
                 headers={"Authorization": f"Bearer {self.auth_token}"}
             )
             if res.status_code == 200:
-                self.document_urls = res.json()
+                fetched_urls = res.json()
                 
-                # If the viewer doesn't exist, build it and mount it
+                for key, val in fetched_urls.items():
+                    if val is not None:
+                        self.document_urls[key] = val
+                
                 if not self.viewer_ref.current:
                     self.viewer_ref.current = PdfViewer(document_urls=self.document_urls, document_title=ctitle)
                     self.inner_row.controls[0] = ft.Container(
@@ -231,15 +270,20 @@ class ChatPage(ft.View):
                     self.page.update() 
                 else: 
                     self.viewer_ref.current.document_title = ctitle
+                    self.viewer_ref.current.document_urls = self.document_urls
                 
-                # Now it is safe to load the PDF!
-                self.viewer_ref.current.document_urls = self.document_urls
                 self.viewer_ref.current.load_pdf(doc_type="Document")
+
+                try:
+                    self.audio.pause()
+                except Exception:
+                    pass
+
                 self.page.update()
                 
         except Exception as e:
             print(f"Error loading chat context: {e}")
-
+            
     def update_sidebar_selection(self):
         for btn in self.history_listview.controls:
             is_active = (btn.data == self.current_conversation_id)
@@ -269,7 +313,93 @@ class ChatPage(ft.View):
         upload_zone = main_area(on_file_accepted=self.accepted, auth_token=self.auth_token)
         self.inner_row.controls[0] = upload_zone
         self.body_col.controls[0] = top_bar(active_step=1)
+
+        try:
+            self.audio.pause()
+            self.audio.src = "audio.mp3"
+            if self.audio.page:
+                self.audio.update()
+        except Exception:
+            pass
+
+        self.inner_row.controls[1] = ft.Stack(
+            controls=[
+                right_panel(self.audio, on_view_change=self.handle_view_change, has_materials=False),
+                self.shield
+            ]
+        )
+        self.shield.visible = False
         
         # 5. Clear the active highlight in the sidebar
         self.update_sidebar_selection()
         self.page.update()
+
+    def wait_for_ai_generation(self, target_convo_id):
+        time.sleep(20) 
+
+        self.processing_chats.discard(target_convo_id)
+        if self.current_conversation_id == target_convo_id:
+            self.refresh_documents()
+            
+            if self.body_col:
+                self.body_col.controls[0] = top_bar(active_step=3)
+                
+            if self.inner_row:
+                self.inner_row.controls[1] = ft.Stack(
+                    controls=[
+                        right_panel(self.audio, on_view_change=self.handle_view_change, has_materials=True),
+                        self.shield
+                    ]
+                )
+                
+            self.shield.visible = False
+
+            success_snack = ft.SnackBar(
+                content=ft.Text("Your materials are ready!", color="white", weight=ft.FontWeight.W_600),
+                bgcolor="#E96486",
+                behavior=ft.SnackBarBehavior.FLOATING
+            )
+            self.page.overlay.append(success_snack)
+            success_snack.open = True
+            
+            self.page.update()
+
+        self.fetch_history()
+
+    def refresh_documents(self):
+        try:
+            res = requests.get(
+                f"http://localhost:8000/chat/{self.current_conversation_id}/documents",
+                headers={"Authorization": f"Bearer {self.auth_token}"}
+            )
+            if res.status_code == 200:
+                fetched_urls = res.json()
+                for key, val in fetched_urls.items():
+                    if val is not None:
+                        self.document_urls[key] = val
+                
+                # Push the new URLs to the viewer silently in the background
+                if self.viewer_ref.current:
+                    self.viewer_ref.current.document_urls = self.document_urls
+        except Exception as e:
+            print(f"Error refreshing documents: {e}")
+
+    def show_locked_warning(self, e):
+        warning_snack = ft.SnackBar(
+            content=ft.Text("Hold tight! We are currently generating your materials...", color="white"),
+            bgcolor="#E96486",
+            behavior=ft.SnackBarBehavior.FLOATING,
+            duration=3000
+        )
+        self.page.overlay.append(warning_snack)
+        warning_snack.open = True
+        self.page.update()
+
+    def handle_view_change(self, doc_type: str):
+        if self.current_conversation_id in self.processing_chats and doc_type != "Document":
+            self.show_locked_warning(None)
+            return
+            
+        if self.viewer_ref.current:
+            self.viewer_ref.current.load_pdf(doc_type=doc_type)
+            self.page.update()

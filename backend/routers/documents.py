@@ -80,7 +80,8 @@ async def upload_document(
             "user_id": active_user_id,
             "conversation_id": conversation_id,
             "title": title,
-            "file_url": public_url
+            "file_url": public_url,
+            "doc_type": "uploaded",
         }).execute()
 
         return {
@@ -171,3 +172,84 @@ async def view_pdf_html(url: str):
     </html>
     """
     return HTMLResponse(content=html_content)
+
+
+async def save_generated_artifact(
+    conversation_id: str, 
+    user_id: str, 
+    file_bytes: bytes, 
+    doc_type: str,     # "Explanation", "Transcript", "Quiz", or "Audio"
+    file_ext: str,     # "pdf" or "mp3"
+    bucket_name: str   # "documents" or "tts-audio"
+):
+    try:
+        # 1. Create a unique path
+        unique_path = f"{user_id}/{uuid.uuid4()}.{file_ext}"
+
+        # 2. Upload the raw bytes to the Supabase bucket
+        supabase_admin.storage.from_(bucket_name).upload(
+            path=unique_path,
+            file=file_bytes,
+            file_options={"content-type": "application/pdf" if file_ext == "pdf" else "audio/mpeg"}
+        )
+
+        # 3. Get the public URL
+        public_url = supabase_admin.storage.from_(bucket_name).get_public_url(unique_path)
+
+        # 4. Save to the database WITH THE TAG
+        supabase_admin.table("documents").insert({
+            "user_id": user_id,
+            "conversation_id": conversation_id,
+            "title": f"Generated {doc_type}",
+            "file_url": public_url,
+            "doc_type": doc_type  # 🚀 THIS IS THE MAGIC TAG
+        }).execute()
+
+        return public_url
+
+    except Exception as e:
+        print(f"Failed to save {doc_type}: {e}")
+        return None
+    
+@router.post("/mock-ai-output")
+async def mock_ai_output(
+    doc_type: str = Form(...), # Type exactly: "Explanation", "Transcript", "Quiz", or "Audio"
+    file: UploadFile = File(...),
+    user = Depends(verify_jwt) # Keeps DB constraints happy!
+):
+    """
+    MOCK ENDPOINT: Uploads a file directly into a specific UI slot for testing.
+    """
+    # 🚀 1. HARDCODE YOUR TARGET CONVERSATION ID HERE
+    # Go to your Supabase table, copy a conversation ID, and paste it below:
+    TARGET_CONVERSATION_ID = "24491166-e6fb-4df7-a54c-6b459202bfe8" 
+    
+    try:
+        # 2. Extract file info
+        file_bytes = await file.read()
+        file_ext = file.filename.split('.')[-1].lower()
+        
+        # 3. Route to the correct bucket based on extension
+        bucket_name = "tts-audio" if file_ext in ["mp3", "wav"] else "documents"
+        
+        # 4. Save to Supabase using our new helper!
+        public_url = await save_generated_artifact( # Ensure you use 'await' if your helper is an async def
+            conversation_id=TARGET_CONVERSATION_ID,
+            user_id=user.id,
+            file_bytes=file_bytes,
+            doc_type=doc_type,
+            file_ext=file_ext,
+            bucket_name=bucket_name
+        )
+        
+        if not public_url:
+            raise HTTPException(status_code=500, detail="Supabase upload failed.")
+            
+        return {
+            "status": "success",
+            "message": f"Successfully injected {doc_type} into conversation!",
+            "file_url": public_url
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Mock Upload Error: {str(e)}")
