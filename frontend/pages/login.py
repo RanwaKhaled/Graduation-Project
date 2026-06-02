@@ -1,11 +1,8 @@
 # frontend/pages/login.py
-from urllib import response
-
 import flet as ft
 import re
 import requests
 from backend.database import supabase_auth
-
 
 # colors: global vars
 purple = "#450A75"
@@ -18,49 +15,73 @@ grey = "#7D7D7D"
 darkgrey = "#2D2D2D"
 white = "#FFFFFF"
 black = "#000000"
-lilac="#F4E6FF"
+lilac = "#F4E6FF"
 
 class LoginPage(ft.View):
     def __init__(self, page: ft.Page):
-        super().__init__(route="/login",
-                         padding=0,
-                         bgcolor=purple)
+        super().__init__(route="/login", padding=0, bgcolor=purple)
         
         # the back button (goes back home)
-        self.back_btn=ft.Container(
-            content=ft.Icon(ft.Icons.ARROW_BACK_IOS_NEW_ROUNDED, 
-                            color=darkgrey, 
-                            size=20),
-                            bgcolor=lightgrey,
-                            width=50,
-                            height=50,
-                            border_radius=12,
-                            on_click=lambda _: page.go("/")
+        self.back_btn = ft.Container(
+            content=ft.Icon(ft.Icons.ARROW_BACK_IOS_NEW_ROUNDED, color=darkgrey, size=20),
+            bgcolor=lightgrey,
+            width=50,
+            height=50,
+            border_radius=12,
+            on_click=lambda _: page.go("/")
         )
 
         # email field
-        self.email_field = ft.TextField(label="Email", 
-                                 bgcolor=lightgrey, 
-                                 color=grey,
-                                 width=350,
-                                 border=ft.Border.all(0),
-                                 prefix_icon=ft.Icons.EMAIL,
-                                )
+        self.email_field = ft.TextField(
+            label="Email", 
+            bgcolor=lightgrey, 
+            color=grey,
+            width=350,
+            border=ft.Border.all(0),
+            prefix_icon=ft.Icons.EMAIL,
+        )
 
         # password field
         self.password_field = ft.TextField(
-                        label="Password",
-                        password=True,
-                        can_reveal_password=True,
-                        bgcolor=lightgrey,
-                        color=grey,
-                        width=350,
-                        border=ft.Border.all(0),
-                        prefix_icon=ft.Icons.PASSWORD,
-                    )
+            label="Password",
+            password=True,
+            can_reveal_password=True,
+            bgcolor=lightgrey,
+            color=grey,
+            width=350,
+            border=ft.Border.all(0),
+            prefix_icon=ft.Icons.PASSWORD,
+        )
         
         # shared error message
         self.shared_error = ft.Text("", color="red", size=14, visible=False)
+        
+        # Isolated Submit Button
+        self.submit_btn = ft.Button(
+            content=ft.Text("Sign in", size=20, color=ft.Colors.WHITE),
+            bgcolor=darkgrey,
+            height=40,
+            width=350,
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+            on_click=self.submit_clicked
+        )
+
+        # Isolated Google Button
+        self.google_btn = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Image(src="/google.png", height=20),
+                    ft.Text("Sign in with Google", color=darkgrey, size=20),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,   
+            ),
+            height=40,
+            width=350,
+            bgcolor=white,
+            border=ft.Border.all(1, darkgrey),
+            border_radius=10,
+            on_click=self.google_signin_clicked
+        )
         
         # main container w/ gradient background
         self.main_container = ft.Container(
@@ -74,7 +95,6 @@ class LoginPage(ft.View):
             content=self.create_login_card()
         )
         
-
         # add the components to the page
         self.controls = [self.main_container]
 
@@ -85,59 +105,47 @@ class LoginPage(ft.View):
             bgcolor=white,
             width=500,
             height=600,
-            padding=ft.Padding.only(top=40, left=30, right=30, bottom=40), # Added top padding for logo space,
+            padding=ft.Padding.only(top=40, left=30, right=30, bottom=40),
             border_radius=40,
             shadow=ft.BoxShadow(
                 blur_radius=20,
                 color=ft.Colors.with_opacity(0.2, ft.Colors.BLACK),
-                ),
+            ),
             content=ft.Column(
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 spacing=10,
                 controls=[
                     ft.Row([
-                        # back button
-                            self.back_btn,
-                            ft.Container(expand=True),
-                        ]),
+                        self.back_btn,
+                        ft.Container(expand=True),
+                    ]),
                     ft.Container(
                         content=ft.Image(src="/logo_black.png", width=120),
                         margin=ft.Margin.only(top=-80), 
                     ),
-                    # title
                     ft.Text("Log In", size=40, weight="bold", color=darkgrey),
-                    # text fields
-                    # textfield for email
+                    
                     self.email_field,
-                    # password with reveal button
                     self.password_field,
-                    # forgot password - resetting password logic here
+                    
                     ft.Container(
                         content=ft.TextButton("Forgot Password?", 
-                                              style=ft.ButtonStyle(
-                                                  color={
-                                                      ft.ControlState.HOVERED: darkgrey,
-                                                      ft.ControlState.DEFAULT: grey,
-                                                  },
-                                                  text_style=ft.TextStyle(size=14),
-                                              ), 
-                                              on_click=lambda _: self.page.go("/reset")                                          
-                                            ),
-                        alignment=ft.Alignment(1, 0),  # align to the right
+                            style=ft.ButtonStyle(
+                                color={
+                                    ft.ControlState.HOVERED: darkgrey,
+                                    ft.ControlState.DEFAULT: grey,
+                                },
+                                text_style=ft.TextStyle(size=14),
+                            ), 
+                            on_click=lambda _: self.page.go("/reset")                                          
+                        ),
+                        alignment=ft.Alignment(1, 0), 
                         width=350,
                     ),
                     self.shared_error,
-                    # login button
-                    ft.Button(
-                        ft.Text("Sign in", size=20),
-                        bgcolor=darkgrey,
-                        color=ft.Colors.WHITE,
-                        height=40,
-                        width=350,
-                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
-                        on_click= self.submit_clicked
-                    ),
-                    # or divider
+                    
+                    self.submit_btn,
+                    
                     ft.Row(
                         controls=[
                             ft.Divider(thickness=1, color=lightgrey, expand=True),
@@ -147,23 +155,9 @@ class LoginPage(ft.View):
                         width=350,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    # login w/ google button
-                    ft.Container(ft.Row(
-                        controls=[
-                            ft.Image(src="/google.png", height=20),
-                            ft.Text("Sign in with Google", color=darkgrey, size=20),
-                        ],
-                        alignment=ft.MainAxisAlignment.CENTER,   
-                    ),
-                    height=40,
-                    width=350,
-                    bgcolor=white,
-                    border=ft.Border.all(1, darkgrey),
-                    border_radius=10,
-                    on_click=self.google_signin_clicked
-                    ),
                     
-                    # prompt to sign up if youu don't have an account
+                    self.google_btn,
+                    
                     ft.Row(
                         controls=[
                             ft.Text("Don't have an account?", size=14, color=grey),
@@ -184,7 +178,6 @@ class LoginPage(ft.View):
             )
         )
 
-   # function to submit user credentials
     def submit_clicked(self, e):
         # 1. Reset everything
         fields = [self.email_field, self.password_field]
@@ -201,7 +194,7 @@ class LoginPage(ft.View):
                 f.border_color = "red"
                 empty_fields = True
 
-        # 3. Check email format (only if email isn't already empty)
+        # 3. Check email format
         email_val = self.email_field.value.strip()
         if email_val and not re.match(r"^[\w\.-]+@[\w\.-]+\.\w{2,}$", email_val):
             self.email_field.border_color = "red"
@@ -219,57 +212,93 @@ class LoginPage(ft.View):
 
         # 5. Live Backend Connection
         if not empty_fields and valid_email:
-                email_val = self.email_field.value.strip()
-                password_val = self.password_field.value
+            # Trigger loading UI
+            self.submit_btn.content = ft.Row([
+                ft.ProgressRing(width=20, height=20, color="white", stroke_width=2),
+                ft.Text("Signing in...", size=20, color="white")
+            ], alignment=ft.MainAxisAlignment.CENTER)
+            self.submit_btn.disabled = True
+            self.page.update()
+
+            email_val = self.email_field.value.strip()
+            password_val = self.password_field.value
+            
+            try:
+                response = requests.post(
+                    "http://localhost:8000/auth/login", 
+                    json={"email": email_val, "password": password_val}
+                )
                 
-                try:
-                    response = requests.post(
-                        "http://localhost:8000/auth/login", 
-                        json={"email": email_val, "password": password_val}
-                    )
+                if response.status_code == 200:
+                    data = response.json()
+                    token = data["token"]
+                    self.page.client_storage.set("auth_token", token)
+                    print("Success! Redirecting to chat...")
+                    self.page.go("/chat")
                     
-                    if response.status_code == 200:
-                        data = response.json()
-                        token = data["token"]
-                        
-                        # FIXED: Add .store before .set()
-                        self.page.client_storage.set("auth_token", token)
-                        
-                        # 2. Go to chat
-                        print("Success! Redirecting to chat...")
-                        self.page.go("/chat")
-                        
-                    else:
-                        error_data = response.json()
-                        self.shared_error.value = error_data.get("detail", "Invalid credentials.")
-                        self.shared_error.visible = True
-                        self.page.update()
-                        
-                except requests.exceptions.ConnectionError:
-                    self.shared_error.value = "Cannot connect to server. Is the backend running?"
+                else:
+                    error_data = response.json()
+                    self.shared_error.value = error_data.get("detail", "Invalid credentials.")
                     self.shared_error.visible = True
+                    # Revert UI
+                    self.submit_btn.content = ft.Text("Sign in", size=20, color=ft.Colors.WHITE)
+                    self.submit_btn.disabled = False
                     self.page.update()
+                    
+            except requests.exceptions.ConnectionError:
+                self.shared_error.value = "Cannot connect to server. Is the backend running?"
+                self.shared_error.visible = True
+                # Revert UI
+                self.submit_btn.content = ft.Text("Sign in", size=20, color=ft.Colors.WHITE)
+                self.submit_btn.disabled = False
+                self.page.update()
+
     async def google_signin_clicked(self, e):
+        # Trigger loading UI for Google Button
+        self.google_btn.content = ft.Row([
+            ft.ProgressRing(width=20, height=20, color=darkgrey, stroke_width=2),
+            ft.Text("Redirecting...", color=darkgrey, size=20)
+        ], alignment=ft.MainAxisAlignment.CENTER)
+        self.google_btn.disabled = True
+        self.page.update()
+
         try:
-            # Replace the URL below with your actual deployed Flet web app URL later
             response = supabase_auth.auth.sign_in_with_oauth({
                 "provider": "google",
                 "options": {
-                    "redirect_to": "http://localhost:8080/login"  # Your exact Flet web port
+                    "redirect_to": "http://localhost:8080/login"  # Change this when deploying!
                 }
             })
             
+            # PKCE Fix
+            verifier = supabase_auth.auth._storage.get_item("supabase.auth.token-code-verifier")
+            if verifier:
+                self.page.client_storage.set("pkce_verifier", verifier)
+            
             if hasattr(response, "url") and response.url:
-                # Wrap the string in ft.Url and use the UrlTarget enum
                 await self.page.launch_url(
                     ft.Url(url=response.url, target=ft.UrlTarget.SELF)
                 )
             else:
                 self.shared_error.value = "Failed to initiate Google Authentication."
                 self.shared_error.visible = True
+                
+                # Revert UI
+                self.google_btn.content = ft.Row([
+                    ft.Image(src="/google.png", height=20),
+                    ft.Text("Sign in with Google", color=darkgrey, size=20),
+                ], alignment=ft.MainAxisAlignment.CENTER)
+                self.google_btn.disabled = False
                 self.page.update()
                 
         except Exception as ex:
             self.shared_error.value = f"Error: {str(ex)}"
             self.shared_error.visible = True
+            
+            # Revert UI
+            self.google_btn.content = ft.Row([
+                ft.Image(src="/google.png", height=20),
+                ft.Text("Sign in with Google", color=darkgrey, size=20),
+            ], alignment=ft.MainAxisAlignment.CENTER)
+            self.google_btn.disabled = False
             self.page.update()

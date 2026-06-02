@@ -1,5 +1,7 @@
 # frontend/pages/new_pass.py
 # this page will be accessed from the reset password link sent to the user's email
+from time import time
+import time
 import flet as ft
 import re
 import requests
@@ -134,55 +136,50 @@ class NewPassPage(ft.View):
         )
     
     def submit_clicked(self, e):
-        
-        fields = [self.password_field]
-        for f in fields:
-            f.border_color = None
-        
+        self.password_field.border_color = None
         self.shared_error.visible = False
         empty_fields = False
 
-        for f in fields:
-            if not f.value or f.value.strip() == "":
-                f.border_color = "red"
-                empty_fields = True
+        if not self.password_field.value or self.password_field.value.strip() == "":
+            self.password_field.border_color = "red"
+            empty_fields = True
 
         if empty_fields:
-            self.shared_error.value = "Please fill in all required fields."
+            self.shared_error.value = "Please enter a new password."
             self.shared_error.visible = True
-
+            self.page.update()
+            return 
         self.page.update()
 
-        if not empty_fields:
-            self.message.visible = True
-            self.page.update()
-        if not empty_fields:
-            password_val = self.password_field.value
+        password_val = self.password_field.value
+        
+        token = self.page.client_storage.get("auth_token")
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        
+        try:
+            response = requests.post(
+                "http://localhost:8000/auth/update-password", 
+                json={"password": password_val},
+                headers=headers 
+            )
             
-            try:
-                # Send the new password to your backend
-                response = requests.post(
-                    "http://localhost:8000/auth/update-password", 
-                    json={"password": password_val}
-                )
+            if response.status_code == 200:
+                # Success! Show the success message
+                self.message.visible = True
+                self.page.update()
+            
+                time.sleep(1.5)
                 
-                if response.status_code == 200:
-                    # Success! Show the success message
-                    self.message.visible = True
-                    self.page.update()
-                    
-                    # Manual routing override to safely go back to login
-                    self.page.route = "/login"
-                    self.page.update()
-                else:
-                    # Backend rejected the new password (e.g., too short)
-                    error_data = response.json()
-                    self.shared_error.value = error_data.get("detail", "Failed to update password.")
-                    self.shared_error.visible = True
-                    self.page.update()
-                    
-            except requests.exceptions.ConnectionError:
-                self.shared_error.value = "Cannot connect to server. Is the backend running?"
+                self.page.go("/login")
+                
+            else:
+                # Backend rejected the new password (e.g., too short or expired token)
+                error_data = response.json()
+                self.shared_error.value = error_data.get("detail", "Failed to update password.")
                 self.shared_error.visible = True
                 self.page.update()
-            print("Success! Proceeding to reset logic...")
+                
+        except requests.exceptions.ConnectionError:
+            self.shared_error.value = "Cannot connect to server. Is the backend running?"
+            self.shared_error.visible = True
+            self.page.update()

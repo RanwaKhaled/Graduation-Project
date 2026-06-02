@@ -22,19 +22,14 @@ def main(page: ft.Page):
     page.padding = 0
     page.bgcolor = "#F8F9FA"
 
-    # Provide a storage-compatible shim so both versions of Flet work.
-    # Some environments expose page.client_storage; others don't. Create a minimal
-    # fallback that tries page.session (if available) and otherwise keeps values
-    # in-memory on the page object.
     if not hasattr(page, "client_storage"):
         class ClientStorageFallback:
-            def __init__(self, page):
-                self._page = page
+            def __init__(self, p):
+                self._page = p
                 if not hasattr(self._page, "_in_memory_storage"):
                     self._page._in_memory_storage = {}
             def set(self, key, value):
                 try:
-                    # Prefer session API if present
                     if hasattr(self._page, "session") and hasattr(self._page.session, "set"):
                         self._page.session.set(key, value)
                     else:
@@ -61,15 +56,16 @@ def main(page: ft.Page):
         # Route: Login & Google OAuth Capture
         elif page.route.startswith("/login"):
             if "?code=" in page.route:
-                # 1. Extract the temporary OAuth code
                 auth_code = page.route.split("?code=")[1].split("&")[0]
                 
                 try:
-                    # 2. Exchange the code for a REAL Supabase Session (which contains the JWT)
+                    saved_verifier = page.client_storage.get("pkce_verifier")
+                    if saved_verifier:
+                        supabase_auth.auth._storage.set_item("supabase.auth.token-code-verifier", saved_verifier)
+
                     session_data = supabase_auth.auth.exchange_code_for_session({"auth_code": auth_code})
                     real_jwt_token = session_data.session.access_token
                     
-                    # 3. Save the REAL JWT token to client storage
                     page.client_storage.set("auth_token", real_jwt_token)
                     
                     print("Google Login Success! Directing to /chat")
@@ -77,15 +73,14 @@ def main(page: ft.Page):
                     page.go("/chat")
                     return
                     
-                except Exception as e:
-                    print(f"Google Auth Exchange failed: {e}")
-                    # If it fails, clear the URL and force them to log in normally
+                except Exception as ex:
+                    print(f"Google Auth Exchange failed: {ex}")
                     page.go("/login")
                     return
             else:
                 page.views.append(LoginPage(page))
-        # Route: Signup, Reset, Contact
 
+        # Route: Signup, Reset, Contact
         elif page.route == "/signup":
             page.views.append(SignupPage(page))
 
@@ -100,13 +95,12 @@ def main(page: ft.Page):
 
         # Route: Chat (Protected)
         elif page.route == "/chat":
-            # Retrieve token securely from the browser
             stored_token = page.client_storage.get("auth_token")
             
             if not stored_token:
                 print("No auth token - redirecting to login")
                 page.go("/login")
-                return  # Stop execution and let the router handle the redirect
+                return 
             else:
                 page.views.append(ChatPage(page, auth_token=stored_token))
 
@@ -118,12 +112,10 @@ def main(page: ft.Page):
         
     page.on_route_change = route_change
     
-    # Start the app at the current browser route if set, otherwise default to "/"
     if not page.route or page.route == "" or page.route == "/":
         page.route = "/"
     route_change(None)     
     page.update()
-
 
 ft.run(
     main, 

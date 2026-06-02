@@ -211,6 +211,7 @@ async def save_generated_artifact(
         print(f"Failed to save {doc_type}: {e}")
         return None
     
+# use this to test stuff
 @router.post("/mock-ai-output")
 async def mock_ai_output(
     doc_type: str = Form(...), # Type exactly: "Explanation", "Transcript", "Quiz", or "Audio"
@@ -220,8 +221,6 @@ async def mock_ai_output(
     """
     MOCK ENDPOINT: Uploads a file directly into a specific UI slot for testing.
     """
-    # 🚀 1. HARDCODE YOUR TARGET CONVERSATION ID HERE
-    # Go to your Supabase table, copy a conversation ID, and paste it below:
     TARGET_CONVERSATION_ID = "7d756d6a-b261-4a2a-b699-0647205d903f" 
     
     try:

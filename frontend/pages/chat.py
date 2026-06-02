@@ -13,7 +13,6 @@ class ChatPage(ft.View):
         super().__init__(route="/chat", padding=0, bgcolor=MAIN_BG)
         
         self.auth_token = auth_token
-        print(f"🔑 MY JWT TOKEN:\n{self.auth_token}\n")
         self.viewer_ref = ft.Ref[PdfViewer]()
         self.processing_chats = set()
 
