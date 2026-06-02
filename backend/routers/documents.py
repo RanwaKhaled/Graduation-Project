@@ -222,7 +222,7 @@ async def mock_ai_output(
     """
     # 🚀 1. HARDCODE YOUR TARGET CONVERSATION ID HERE
     # Go to your Supabase table, copy a conversation ID, and paste it below:
-    TARGET_CONVERSATION_ID = "24491166-e6fb-4df7-a54c-6b459202bfe8" 
+    TARGET_CONVERSATION_ID = "7d756d6a-b261-4a2a-b699-0647205d903f" 
     
     try:
         # 2. Extract file info

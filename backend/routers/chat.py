@@ -103,17 +103,16 @@ async def get_conversation_documents(conversation_id: str, user = Depends(verify
             "Document": None,
             "Explanation": None,
             "Transcript": None,
-            "Quiz": None
+            "Quiz": None,
+            "Audio": None,
         }
 
         if docs_res.data:
             for doc in docs_res.data:
                 raw_tag = doc.get("doc_type")
-
                 final_tag = "Document" 
                 
                 if raw_tag:
-                    # Clean the database string (make it lowercase to ignore capitalization)
                     clean_tag = raw_tag.lower().strip()
                     
                     if clean_tag in ["uploaded", "document", "random_doc"]:
@@ -124,6 +123,8 @@ async def get_conversation_documents(conversation_id: str, user = Depends(verify
                         final_tag = "Transcript"
                     elif clean_tag == "quiz":
                         final_tag = "Quiz"
+                    elif clean_tag == "audio":
+                        final_tag = "Audio"
 
                 urls[final_tag] = doc["file_url"]
 

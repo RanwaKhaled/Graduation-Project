@@ -24,6 +24,13 @@ class ChatPage(ft.View):
             on_click=self.show_locked_warning
         )
 
+        self.empty_shield = ft.Container(
+            bgcolor=ft.Colors.TRANSPARENT,
+            left=0, right=0, top=0, bottom=0,
+            visible=True, 
+            on_click=self.show_empty_warning
+        )
+
         self.current_conversation_id = str(uuid.uuid4())
         
         self.profile_name = ft.Text("...", color="white", size=15, weight=ft.FontWeight.W_600, animate_opacity=150)
@@ -36,7 +43,8 @@ class ChatPage(ft.View):
             "Document": None, 
             "Explanation": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
             "Transcript":  "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-            "Quiz": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+            "Quiz": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", 
+            "Audio": "audio.mp3"
         }
 
         self.audio = Audio(
@@ -78,9 +86,9 @@ class ChatPage(ft.View):
         safe_right_panel = ft.Stack(
             controls=[
                 right_panel(self.audio, on_view_change=self.handle_view_change),
-                self.shield 
+                self.shield,
+                self.empty_shield,
             ],
-            # expand=True
         )
 
         self.inner_row = ft.Row(
@@ -141,6 +149,7 @@ class ChatPage(ft.View):
 
         
         self.shield.visible = True
+        self.empty_shield.visible = False
         self.page.update()
 
         threading.Thread(target=self.fetch_history, daemon=True).start()
@@ -233,21 +242,29 @@ class ChatPage(ft.View):
 
         is_processing = conversation_id in self.processing_chats
 
+        self.document_urls = {
+            "Document": None,
+            "Explanation": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+            "Transcript":  "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+            "Quiz": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+            "Audio": "audio.mp3" 
+        }
+
         if self.body_col:
             self.body_col.controls[0] = top_bar(active_step=2 if is_processing else 3)
 
         self.shield.visible = is_processing
+        self.empty_shield.visible = False
 
         if self.inner_row:
             self.inner_row.controls[1] = ft.Stack(
                 controls=[
                     right_panel(self.audio, on_view_change=self.handle_view_change, has_materials=not is_processing),
-                    self.shield
+                    self.shield,
+                    self.empty_shield,
                 ],
-                # expand=True
             )
         
-
         try:
             res = requests.get(
                 f"http://localhost:8000/chat/{conversation_id}/documents",
@@ -279,6 +296,12 @@ class ChatPage(ft.View):
                 except Exception:
                     pass
 
+                new_audio_url = self.document_urls.get("Audio")
+                self.audio.src = new_audio_url if new_audio_url else "audio.mp3"
+
+                if self.audio.page:
+                    self.audio.update()
+
                 self.page.update()
                 
         except Exception as e:
@@ -303,7 +326,8 @@ class ChatPage(ft.View):
             "Document": None,
             "Explanation": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
             "Transcript":  "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-            "Quiz": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+            "Quiz": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+            "Audio": "audio.mp3",
         }
         
         # 3. Nuke the old PDF viewer reference so it builds fresh next time
@@ -319,16 +343,19 @@ class ChatPage(ft.View):
             self.audio.src = "audio.mp3"
             if self.audio.page:
                 self.audio.update()
+
         except Exception:
             pass
 
         self.inner_row.controls[1] = ft.Stack(
             controls=[
                 right_panel(self.audio, on_view_change=self.handle_view_change, has_materials=False),
-                self.shield
+                self.shield,
+                self.empty_shield,
             ]
         )
         self.shield.visible = False
+        self.empty_shield.visible = True
         
         # 5. Clear the active highlight in the sidebar
         self.update_sidebar_selection()
@@ -348,7 +375,8 @@ class ChatPage(ft.View):
                 self.inner_row.controls[1] = ft.Stack(
                     controls=[
                         right_panel(self.audio, on_view_change=self.handle_view_change, has_materials=True),
-                        self.shield
+                        self.shield,
+                        self.empty_shield
                     ]
                 )
                 
@@ -381,6 +409,13 @@ class ChatPage(ft.View):
                 # Push the new URLs to the viewer silently in the background
                 if self.viewer_ref.current:
                     self.viewer_ref.current.document_urls = self.document_urls
+                
+                new_audio_url = self.document_urls.get("Audio")
+                if new_audio_url and new_audio_url != "audio.mp3":
+                    self.audio.src = new_audio_url
+                    if self.audio.page:
+                        self.audio.update()
+
         except Exception as e:
             print(f"Error refreshing documents: {e}")
 
@@ -403,3 +438,14 @@ class ChatPage(ft.View):
         if self.viewer_ref.current:
             self.viewer_ref.current.load_pdf(doc_type=doc_type)
             self.page.update()
+
+    def show_empty_warning(self, e):
+        empty_snack = ft.SnackBar(
+            content=ft.Text("You haven't uploaded any documents yet!", color="white"),
+            bgcolor="#E96486", 
+            behavior=ft.SnackBarBehavior.FLOATING,
+            duration=3000
+        )
+        self.page.overlay.append(empty_snack)
+        empty_snack.open = True
+        self.page.update()
