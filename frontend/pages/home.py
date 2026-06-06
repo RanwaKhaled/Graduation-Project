@@ -445,7 +445,7 @@ class HomePage(ft.View):
                                     content= ft.Row(
                                         controls=[
                                             ft.Image(src="/logo_white.png", height=80, fit=ft.BoxFit.CONTAIN),
-                                            ft.Text("Your AI learning assistant that turns \nlectures into understanding.",
+                                            ft.Text("Your AI learning assistant that turns \nlectures into real understanding.",
                                                     color=ft.Colors.WHITE,
                                                     size=16,
                                                     )

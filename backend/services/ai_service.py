@@ -120,3 +120,58 @@ def _concatenate_wav_files(wav_bytes_list: list[bytes]) -> bytes:
 
     output_buf.seek(0)
     return output_buf.read()
+
+
+# OCR & DocGen configuration
+DOCGEN_RUNPOD_URL = os.getenv("DOCGEN_RUNPOD_URL", "").rstrip("/")
+DOCGEN_API_KEY = os.getenv("DOCGEN_API_KEY", "yara-docgen-trial")
+MISTRAL_API_KEY = os.getenv("MISTRAL_OCR_API_KEY", "")
+
+async def extract_text_via_paddle(image_urls: list[str]) -> str:
+    print(f"[AI Service] Sending {len(image_urls)} images to Mistral OCR...")
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        all_text = []
+        for i, url in enumerate(image_urls):
+            print(f"[Mistral OCR] Processing page {i+1}/{len(image_urls)}...")
+            r = await client.post(
+                "https://api.mistral.ai/v1/ocr",
+                headers={
+                    "Authorization": f"Bearer {MISTRAL_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "mistral-ocr-latest",
+                    "document": {
+                        "type": "image_url",
+                        "image_url": url
+                    }
+                }
+            )
+            r.raise_for_status()
+            pages = r.json().get("pages", [])
+            for page in pages:
+                all_text.append(page.get("markdown", ""))
+
+    combined = "\n\n---\n\n".join(all_text)
+    print(f"[Mistral OCR] Done. Total characters: {len(combined)}")
+    return combined
+
+async def generate_explanation(text: str) -> str:
+    print("[AI Service] Routing text to DocGen Explainer task...")
+    payload = {"document_text": text, "max_new_tokens": 2048, "api_key": DOCGEN_API_KEY}
+
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        r = await client.post(f"{DOCGEN_RUNPOD_URL}/explain", json=payload)
+        r.raise_for_status()
+        return r.json()["explanation"]
+
+async def generate_quiz(explanation_text: str) -> str:
+    print("[AI Service] Requesting Quiz generation from model...")
+    payload = {"explanation_text": explanation_text, "max_new_tokens": 2048, "api_key": DOCGEN_API_KEY}
+    
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        r = await client.post(f"{DOCGEN_RUNPOD_URL}/generate_quiz", json=payload)
+        r.raise_for_status()
+        return r.json()["quiz"]
+    
+

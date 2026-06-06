@@ -22,6 +22,20 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
 from arabic_reshaper import reshape
 from bidi.algorithm import get_display
+from backend.services.ai_service import extract_text_via_paddle, generate_explanation, generate_quiz, text_to_speech
+import markdown
+import tempfile
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Image,
+    PageBreak,
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER
+from backend.routers.text_bytes_english import text_to_pdf_bytes_english
+import matplotlib.pyplot as plt
 
 router = APIRouter(prefix="/documents", tags=["Document Uploads"])
 
@@ -288,6 +302,14 @@ async def run_ai_pipeline(conversation_id, user_id, pdf_url):
         # step 1: convert PDF pages to images stored in supabase, get back public URLs
         image_urls = await convert_pdf_pages_to_image_urls(pdf_url, user_id)
 
+        print("[AI pipeline] PDF converted to images, starting text extraction with PaddleOCR...")
+        raw_text = await extract_text_via_paddle(image_urls)
+        print(f"[AI pipeline] OCR extraction complete. Extracted text length: {len(raw_text)} characters")
+
+        if not raw_text.strip():
+            print("[AI pipeline] OCR returned no text. Aborting.")
+            return
+        
         if not image_urls:
             print("[AI pipeline] No images extracted from PDF")
             return
@@ -298,11 +320,11 @@ async def run_ai_pipeline(conversation_id, user_id, pdf_url):
         explanation_text = await get_full_explanation(image_urls)
         explanation_text = clean_ai_transcript(explanation_text)
         
-        # save transcript in a text file for debugging
+        # # save transcript in a text file for debugging
         with open("arabic_text.txt", "w", encoding="utf-8") as file:
             file.write(explanation_text)
 
-        # step 3: convert md txt to pdf bytes
+        # # step 3: convert md txt to pdf bytes
         explanation_pdf_bytes = text_to_pdf_bytes(explanation_text)
 
         # step 4: save explanation pdf to supabase 
@@ -333,6 +355,34 @@ async def run_ai_pipeline(conversation_id, user_id, pdf_url):
             print(f"[AI pipeline] Audio saved")
         else:
             print("[AI pipeline] TTS returned empty bytes, skipping audio save.")
+
+        # DocGen
+
+        print("[AI Pipeline] Generating Explanation...")
+        explanation_markdown = await generate_explanation(raw_text)
+        explanation_pdf_bytes = text_to_pdf_bytes_english(explanation_markdown)
+
+        await save_generated_artifact(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            file_bytes=explanation_pdf_bytes,
+            doc_type="Explanation",
+            file_ext="pdf",
+            bucket_name="documents"
+        )
+
+        print("[AI Pipeline] Generating Quiz...")
+        quiz_markdown = await generate_quiz(explanation_markdown)
+        quiz_pdf_bytes = text_to_pdf_bytes_english(quiz_markdown)
+        
+        await save_generated_artifact(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            file_bytes=quiz_pdf_bytes,
+            doc_type="Quiz",
+            file_ext="pdf",
+            bucket_name="documents"
+        )
 
     except Exception as e:
         print(f"[AI Pipeline] FAILED for conversation {conversation_id}: {e}")

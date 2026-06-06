@@ -12,7 +12,6 @@ itsdangerous
 routers
 uuid
 aiofiles
-base64
 convertapi
 requests
 reportlab
@@ -26,6 +25,9 @@ pymupdf
 fpdf2
 arabic-reshaper
 python-bidi
+pandox
+markdown 
+matplotlib
 
 # Shared
 httpx
