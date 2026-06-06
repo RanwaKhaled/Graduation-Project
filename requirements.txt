@@ -15,6 +15,7 @@ aiofiles
 base64
 convertapi
 requests
+reportlab
 
 # Frontend
 flet
@@ -23,6 +24,8 @@ flet-audio
 flet-webview
 pymupdf
 fpdf2
+arabic-reshaper
+python-bidi
 
 # Shared
 httpx

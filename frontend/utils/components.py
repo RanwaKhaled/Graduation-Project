@@ -6,7 +6,6 @@ from .panel_hover import PanelHoverButton
 import flet_audio
 from flet_audio import Audio, ReleaseMode
 
-
 SIDEBAR_BG = "#321664"   
 TOPBAR_BG = "#FFFFFF"   
 MAIN_BG = "#FFFFFF"
@@ -453,10 +452,10 @@ def right_panel(audio: Audio):
         ),
     )
 
-async def download_file(e):
-    try:
-        print("📥 Triggering direct download for dummy.pdf...")
-        await e.page.launch_url("/dummy.pdf")
-    except Exception as ex:
-        print(f"❌ Download error: {ex}")
+async def download_file(e, doc_type: str, document_urls: dict):
+    url = document_urls.get(doc_type)
+    if not url or "dummy.pdf" in url or url == "audio.mp3":
+        print(f"❌ No real file for {doc_type} yet.")
+        return
+    await e.page.launch_url(url)
 

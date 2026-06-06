@@ -1,16 +1,33 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
+# backend/routers/document.py
+import io
+import os
+import httpx
+import re
+import convertapi
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
+from fastapi.concurrency import run_in_threadpool
+import asyncio
 import uuid
 from backend.database import supabase_auth, supabase_admin
 from backend.utils.security import verify_jwt
-import httpx
 from fastapi.responses import HTMLResponse, Response
 import urllib.parse
 from backend.utils.converter import convert_to_pdf
+from backend.services.ai_service import get_full_explanation, text_to_speech
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.units import cm
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
+from arabic_reshaper import reshape
+from bidi.algorithm import get_display
 
 router = APIRouter(prefix="/documents", tags=["Document Uploads"])
 
 @router.post("/upload")
 async def upload_document(
+    background_tasks: BackgroundTasks,
     conversation_id: str = Form(...), 
     title: str = Form(...),
     file: UploadFile = File(...),
@@ -83,6 +100,15 @@ async def upload_document(
             "file_url": public_url,
             "doc_type": "uploaded",
         }).execute()
+
+        # background task to trigger ai pipeline
+        if content_type == "application/pdf":
+            background_tasks.add_task(
+                run_ai_pipeline,
+                conversation_id=conversation_id,
+                user_id=active_user_id,
+                pdf_url=public_url,
+            )
 
         return {
             "status": "success",
@@ -190,7 +216,7 @@ async def save_generated_artifact(
         supabase_admin.storage.from_(bucket_name).upload(
             path=unique_path,
             file=file_bytes,
-            file_options={"content-type": "application/pdf" if file_ext == "pdf" else "audio/mpeg"}
+            file_options={"content-type": "application/pdf" if file_ext == "pdf" else "audio/wav" if file_ext == "wav" else "audio/mpeg"}
         )
 
         # 3. Get the public URL
@@ -252,3 +278,214 @@ async def mock_ai_output(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Mock Upload Error: {str(e)}")
+    
+# convert pdf pages -> images -> call runpod -> join text -> save doc
+async def run_ai_pipeline(conversation_id, user_id, pdf_url):
+    """background task (all args are str)"""
+    try:
+        print(f"[AI pipeline] starting for convo {conversation_id}")
+
+        # step 1: convert PDF pages to images stored in supabase, get back public URLs
+        image_urls = await convert_pdf_pages_to_image_urls(pdf_url, user_id)
+
+        if not image_urls:
+            print("[AI pipeline] No images extracted from PDF")
+            return
+        
+        print(f"[AI pipeline] Got {len(image_urls)} page images, calling runpod...")
+
+        # step 2: call runpod for each page and combine text
+        explanation_text = await get_full_explanation(image_urls)
+        explanation_text = clean_ai_transcript(explanation_text)
+        
+        # save transcript in a text file for debugging
+        with open("arabic_text.txt", "w", encoding="utf-8") as file:
+            file.write(explanation_text)
+
+        # step 3: convert md txt to pdf bytes
+        explanation_pdf_bytes = text_to_pdf_bytes(explanation_text)
+
+        # step 4: save explanation pdf to supabase 
+        # with "Transcript" tag
+        await save_generated_artifact(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            file_bytes=explanation_pdf_bytes,
+            doc_type='Transcript',
+            file_ext="pdf",
+            bucket_name="documents"
+        )
+
+        # adding call for TTS model
+        print("[AI pipeline] Transcript saved, starting TTS...")
+
+        # generate audio
+        wav_bytes = await text_to_speech(explanation_text)
+        if wav_bytes:
+            await save_generated_artifact(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                file_bytes=wav_bytes,
+                doc_type="Audio",
+                file_ext="wav",
+                bucket_name="tts-audio"
+            )
+            print(f"[AI pipeline] Audio saved")
+        else:
+            print("[AI pipeline] TTS returned empty bytes, skipping audio save.")
+
+    except Exception as e:
+        print(f"[AI Pipeline] FAILED for conversation {conversation_id}: {e}")
+
+
+async def convert_pdf_pages_to_image_urls(pdf_url: str, user_id: str) -> list[str]:
+    """download pdf from supabase, split into imgs, upload to vlm-image bucker, return their public urls"""
+
+    convertapi.api_credentials = os.getenv("CONVERT_API_KEY")
+    
+    # Run the blocking ConvertAPI call in a thread pool
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None,  # uses default ThreadPoolExecutor
+        lambda: convertapi.convert("png", {"File": pdf_url}, from_format="pdf")
+    )
+
+    print(f"[AI Pipeline] ConvertAPI returned {len(result.files)} files")
+    image_urls = []
+    for i, file_obj in enumerate(result.files):
+        img_bytes = file_obj.io.read()
+        unique_path = f"{user_id}/slides/{uuid.uuid4()}.png"
+        supabase_admin.storage.from_("vlm-image").upload(
+            path=unique_path,
+            file=img_bytes,
+            file_options={"content-type": "image/png"}
+        )
+        public_url = supabase_admin.storage.from_("vlm-image").get_public_url(unique_path)
+        image_urls.append(public_url)
+    
+    return image_urls
+
+# Register font 
+pdfmetrics.registerFont(TTFont("Amiri", r"assets\Amiri-Regular.ttf"))
+
+def wrap_and_prepare_arabic(text: str, font_name: str, font_size: int, max_width: float) -> list:
+    """
+    Splits long Arabic text into lines that fit the margin width safely,
+    then applies character shaping and BiDi layout line-by-line.
+    """
+    if not text or not text.strip():
+        return []
+
+    words = text.split()
+    lines = []
+    current_line = []
+
+    for word in words:
+        # Test line length using ReportLab's stringWidth checker
+        test_line = " ".join(current_line + [word])
+        width = pdfmetrics.stringWidth(test_line, font_name, font_size)
+        
+        if width <= max_width:
+            current_line.append(word)
+        else:
+            if current_line:
+                lines.append(" ".join(current_line))
+            current_line = [word]
+            
+    if current_line:
+        lines.append(" ".join(current_line))
+
+    # Shape and apply BiDi to each fitted line completely independent of the next
+    prepared_lines = []
+    for line in lines:
+        reshaped = reshape(line)
+        bidi_line = get_display(reshaped, base_dir='R')
+        prepared_lines.append(bidi_line)
+
+    return prepared_lines
+
+
+def clean_ai_transcript(text: str) -> str:
+    lines = text.split('\n')
+    cleaned = []
+    prev = ""
+    for line in lines:
+        stripped = line.strip()
+        if stripped and stripped != prev:
+            cleaned.append(line)
+            prev = stripped
+        elif not stripped:
+            cleaned.append("")
+            prev = ""
+    return '\n'.join(cleaned)
+
+
+def text_to_pdf_bytes(markdown_text: str) -> bytes:
+    markdown_text = clean_ai_transcript(markdown_text)
+    
+    buffer = io.BytesIO()
+    
+    # Page setup metrics
+    right_m = 2.8 * cm
+    left_m = 2.8 * cm
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=right_m,
+        leftMargin=left_m,
+        topMargin=2.5*cm,
+        bottomMargin=2.5*cm
+    )
+
+    # Calculate exactly how much horizontal room we have for text wrapping
+    page_width, _ = A4
+    printable_width = page_width - (left_m + right_m)
+
+    normal_style = ParagraphStyle(
+        "Normal",
+        fontName="Amiri",
+        fontSize=12,
+        leading=21,                  
+        alignment=2, # Right-aligned
+    )
+
+    heading_style = ParagraphStyle(
+        "Heading",
+        fontName="Amiri",
+        fontSize=16,
+        leading=26,
+        alignment=2,
+        spaceAfter=10,
+        spaceBefore=12,
+    )
+
+    story = []
+    blocks = re.split(r'\n\s*\n|\n---\s*\n', markdown_text)
+
+    for block in blocks:
+        block = block.strip()
+        if not block:
+            continue
+
+        if block.startswith("## "):
+            # Headings are short, so we process them normally
+            heading_text = block[3:].strip()
+            reshaped_head = reshape(heading_text)
+            bidi_head = get_display(reshaped_head, base_dir='R')
+            story.append(Paragraph(bidi_head, heading_style))
+        else:
+            # Process paragraph block safely using the custom line wrapping algorithm
+            prepared_lines = wrap_and_prepare_arabic(
+                text=block, 
+                font_name="Amiri", 
+                font_size=12, 
+                max_width=printable_width
+            )
+            
+            # Use HTML break tags to join the pre-arranged lines within one paragraph object
+            paragraph_content = "<br/>".join(prepared_lines)
+            story.append(Paragraph(paragraph_content, normal_style))
+            story.append(Spacer(1, 14))
+
+    doc.build(story)
+    return buffer.getvalue()

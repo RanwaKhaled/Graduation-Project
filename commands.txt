@@ -3,3 +3,11 @@ uvicorn backend.main:app --reload
 to start frontend:
 cd frontend
 flet run main.py --web --port 8080
+
+for ranwa:
+to switch out of miniconda:
+backend:
+"%USERPROFILE%\AppData\Local\Programs\Python\Python311\python.exe" -m uvicorn backend.main:app --reload
+frontend:
+cd frontend
+"%USERPROFILE%\AppData\Local\Programs\Python\Python311\python.exe" main.py

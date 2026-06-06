@@ -1,3 +1,4 @@
+# frontend/pages/chat.py
 import time
 import flet as ft
 import uuid
@@ -7,6 +8,7 @@ from utils.components import MAIN_BG, sidebar, top_bar, main_area
 from utils.right_panel import right_panel
 from utils.pdf_viewer import PdfViewer
 import threading
+import asyncio
 
 class ChatPage(ft.View):
     def __init__(self, page: ft.Page, auth_token: str = None):
@@ -84,7 +86,7 @@ class ChatPage(ft.View):
 
         safe_right_panel = ft.Stack(
             controls=[
-                right_panel(self.audio, on_view_change=self.handle_view_change),
+                right_panel(self.audio, on_view_change=self.handle_view_change, document_urls=self.document_urls),
                 self.shield,
                 self.empty_shield,
             ],
@@ -258,7 +260,7 @@ class ChatPage(ft.View):
         if self.inner_row:
             self.inner_row.controls[1] = ft.Stack(
                 controls=[
-                    right_panel(self.audio, on_view_change=self.handle_view_change, has_materials=not is_processing),
+                    right_panel(self.audio, on_view_change=self.handle_view_change, has_materials=not is_processing, document_urls=self.document_urls),
                     self.shield,
                     self.empty_shield,
                 ],
@@ -348,7 +350,7 @@ class ChatPage(ft.View):
 
         self.inner_row.controls[1] = ft.Stack(
             controls=[
-                right_panel(self.audio, on_view_change=self.handle_view_change, has_materials=False),
+                right_panel(self.audio, on_view_change=self.handle_view_change, has_materials=False, document_urls=self.document_urls),
                 self.shield,
                 self.empty_shield,
             ]
@@ -361,8 +363,39 @@ class ChatPage(ft.View):
         self.page.update()
 
     def wait_for_ai_generation(self, target_convo_id):
-        time.sleep(20) 
+        """Poll every 15 seconds until exp appears, max: 15 mins"""
+        max_attempts = 60 # 60*15s = 15 mins
+        interval = 15
 
+        for attempt in range(max_attempts):
+            time.sleep(interval)
+
+            try:
+                res = requests.get(
+                    f"http://localhost:8000/chat/{target_convo_id}/documents",
+                    headers={"Authorization": f"Bearer {self.auth_token}"}
+                )
+                if res.status_code == 200:
+                    fetched_urls = res.json()
+                    # explanation_url = fetched_urls.get("Audio")
+                    # if not explanation_url:
+                    #     explanation_url = fetched_urls.get("Transcript")  # fallback if TTS fails
+
+                    # # if a real exp url exists, we're done
+                    # if explanation_url and "dummy.pdf" not in explanation_url:
+                    #     print("[Frontend] Explanation ready")
+                    #     break
+                    audio_url = fetched_urls.get("Audio")
+                    if audio_url and audio_url != "audio.mp3":
+                        print("[Frontend] Audio ready, pipeline complete")
+                        break
+            except Exception as e:
+                print(f"[Frontend] attempt {attempt+1}: still waiting")
+        # timing out after 10 minutes
+        else:
+            print("[Frontend] Timed out waiting for AI model")
+
+        # whether we succeeded or timed out, update the UI
         self.processing_chats.discard(target_convo_id)
         if self.current_conversation_id == target_convo_id:
             self.refresh_documents()
@@ -373,7 +406,7 @@ class ChatPage(ft.View):
             if self.inner_row:
                 self.inner_row.controls[1] = ft.Stack(
                     controls=[
-                        right_panel(self.audio, on_view_change=self.handle_view_change, has_materials=True),
+                        right_panel(self.audio, on_view_change=self.handle_view_change, has_materials=True, document_urls=self.document_urls),
                         self.shield,
                         self.empty_shield
                     ]
@@ -412,8 +445,13 @@ class ChatPage(ft.View):
                 new_audio_url = self.document_urls.get("Audio")
                 if new_audio_url and new_audio_url != "audio.mp3":
                     self.audio.src = new_audio_url
+                    self.audio.src_path = None # clear local path
                     if self.audio.page:
                         self.audio.update()
+                        asyncio.run_coroutine_threadsafe(
+                            self.audio.load(),
+                            self.page.loop
+                        )
 
         except Exception as e:
             print(f"Error refreshing documents: {e}")

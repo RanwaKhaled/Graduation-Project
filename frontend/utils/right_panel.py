@@ -5,7 +5,7 @@ import flet_audio as fta
 import time
 import asyncio
 
-def right_panel(audio: Audio, on_view_change=None, has_materials=False):
+def right_panel(audio: Audio, on_view_change=None, has_materials=False, document_urls: dict = None):
     div = ft.Divider(color="#B3D3D6", height=1, thickness=1)
 
     is_view_clicked = [False]
@@ -189,12 +189,12 @@ def right_panel(audio: Audio, on_view_change=None, has_materials=False):
                         ft.Icons.MIC_NONE_ROUNDED, "Audio",
                         show_view=True,
                         on_view=view_audio, 
-                        on_download=download_file,
+                        on_download=lambda e: asyncio.ensure_future(download_file(e, "Audio", document_urls)),
                     ),
                     PanelHoverButton(
                         ft.Icons.TEXT_FIELDS_ROUNDED, "Transcript",
                        on_view=lambda e: on_view_change("Transcript") if on_view_change else None,
-                        on_download=download_file,
+                        on_download=lambda e: asyncio.ensure_future(download_file(e, "Transcript", document_urls)),
                     ),
                 ),
                 div,
@@ -207,12 +207,12 @@ def right_panel(audio: Audio, on_view_change=None, has_materials=False):
                     PanelHoverButton(
                         ft.Icons.DESCRIPTION_OUTLINED, "Explanation",
                         on_view=lambda e: on_view_change("Explanation") if on_view_change else None,
-                        on_download=download_file,
+                        on_download=lambda e: asyncio.ensure_future(download_file(e, "Explanation", document_urls)),
                     ),
                     PanelHoverButton(
                         ft.Icons.MENU_BOOK_ROUNDED, "Quiz",
                         on_view=lambda e: on_view_change("Quiz") if on_view_change else None,
-                        on_download=download_file,
+                        on_download=lambda e: asyncio.ensure_future(download_file(e, "Quiz", document_urls)),
                     ),
                 ),
                 div,
